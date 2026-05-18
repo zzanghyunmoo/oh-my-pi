@@ -4,6 +4,9 @@
   "private": true,
   "description": "Personal Pi extensions, skills, prompt templates, and themes.",
   "keywords": ["pi-package"],
+  "scripts": {
+    "test": "node tests/validate-skills.mjs"
+  },
   "type": "module",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
