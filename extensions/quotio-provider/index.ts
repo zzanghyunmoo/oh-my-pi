@@ -100,8 +100,10 @@ export default function (pi: ExtensionAPI) {
 
       const startTime = Date.now();
 
+      const probeUrl = baseUrl.replace(/\/+$/, "") + "/models";
+
       try {
-        const response = await fetch(baseUrl, {
+        const response = await fetch(probeUrl, {
           method: "GET",
           headers: {
             Authorization: `Bearer ${apiKey}`,
