@@ -18,7 +18,11 @@
     "@earendil-works/pi-coding-agent": "*"
   },
   "pi": {
-    "extensions": ["./extensions"],
+    "extensions": [
+      "./extensions/env-loader",
+      "./extensions/quotio-provider",
+      "./extensions/workspace-connectors"
+    ],
     "prompts": ["./prompts"],
     "themes": ["./themes"]
   }

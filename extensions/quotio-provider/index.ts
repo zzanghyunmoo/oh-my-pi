@@ -1,36 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { readFileSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
 const REQUIRED_ENV_VARS = ["QUOTIO_BASE_URL", "QUOTIO_API_KEY"] as const;
-
-function loadEnvFile(): void {
-  const envPath = resolve(__dirname, "../../.env");
-  try {
-    const content = readFileSync(envPath, "utf-8");
-    for (const line of content.split("\n")) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith("#")) continue;
-      const eqIndex = trimmed.indexOf("=");
-      if (eqIndex === -1) continue;
-      const key = trimmed.slice(0, eqIndex).trim();
-      let value = trimmed.slice(eqIndex + 1).trim();
-      // Strip surrounding quotes (single or double)
-      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-        value = value.slice(1, -1);
-      }
-      if (!process.env[key]) {
-        process.env[key] = value;
-      }
-    }
-  } catch {
-    // .env file not found — rely on existing environment variables
-  }
-}
-
-loadEnvFile();
 
 function getMissingEnvVars(): string[] {
   return REQUIRED_ENV_VARS.filter(
@@ -78,6 +48,7 @@ function toProviderModels(models: QuotioModel[]) {
 }
 
 export default function (pi: ExtensionAPI) {
+  if (process.env.ENABLE_QUOTIO !== "true") return;
   pi.on("session_start", async (_event, ctx) => {
     const missing = getMissingEnvVars();
 

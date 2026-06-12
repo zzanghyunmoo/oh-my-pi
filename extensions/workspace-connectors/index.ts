@@ -76,6 +76,7 @@ function runInteractive(command: string, args: string[]): Promise<{ code: number
 }
 
 export default function (pi: ExtensionAPI) {
+  if (process.env.ENABLE_WORKSPACE_CONNECTORS !== "true") return;
   pi.on("session_start", async (_event, ctx) => {
     ctx.ui.notify(
       "Workspace connectors loaded. Use /connector-login linear|notion, then tools workspace_mcp_list_tools / workspace_mcp_call_tool.",
