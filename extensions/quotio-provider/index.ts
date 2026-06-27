@@ -2,6 +2,14 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 const REQUIRED_ENV_VARS = ["QUOTIO_BASE_URL", "QUOTIO_API_KEY"] as const;
 
+type NotifyLevel = "info" | "error";
+
+interface NotificationContext {
+  readonly ui: {
+    notify(message: string, level: NotifyLevel): void | Promise<void>;
+  };
+}
+
 function getMissingEnvVars(): string[] {
   return REQUIRED_ENV_VARS.filter(
     (key) => !process.env[key] || process.env[key]!.trim() === "",
@@ -35,11 +43,12 @@ function toProviderModels(models: QuotioModel[]) {
   return models.map((m) => {
     const isVisionCapable = m.id.includes("claude") || m.id.includes("gpt-4o");
     const isLargeContext = m.id.includes("claude");
+    const input: ("text" | "image")[] = isVisionCapable ? ["text", "image"] : ["text"];
     return {
       id: m.id,
       name: m.id.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" "),
       reasoning: m.id.includes("agentic") || m.id.includes("opus"),
-      input: isVisionCapable ? ["text", "image"] : ["text"],
+      input,
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       contextWindow: isLargeContext ? 200000 : 128000,
       maxTokens: isLargeContext ? 64000 : 16384,
@@ -49,7 +58,7 @@ function toProviderModels(models: QuotioModel[]) {
 
 export default function (pi: ExtensionAPI) {
   if (process.env.ENABLE_QUOTIO !== "true") return;
-  pi.on("session_start", async (_event, ctx) => {
+  pi.on("session_start", async (_event: unknown, ctx: NotificationContext) => {
     const missing = getMissingEnvVars();
 
     if (missing.length > 0) {
@@ -89,7 +98,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerCommand("quotio-status", {
     description: "Check quotio proxy connectivity and list available models",
-    handler: async (_args, ctx) => {
+    handler: async (_args: string, ctx: NotificationContext) => {
       const missing = getMissingEnvVars();
       if (missing.length > 0) {
         ctx.ui.notify(

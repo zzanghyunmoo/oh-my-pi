@@ -1,11 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-
-const KNOWN_TOGGLES: Record<string, string> = {
-  ENABLE_QUOTIO: "quotio-provider",
-  ENABLE_WORKSPACE_CONNECTORS: "workspace-connectors",
-};
+import { getToggleControlledCapabilities } from "../capability-registry.js";
 
 function loadCwdEnv(): string | null {
   const envPath = resolve(process.cwd(), ".env");
@@ -40,12 +36,9 @@ export default function (pi: ExtensionAPI) {
       ctx.ui.notify(`oh-my-pi: .env 로드됨 — ${loadedPath}`, "info");
     }
 
-    const disabled: string[] = [];
-    for (const [envVar, extName] of Object.entries(KNOWN_TOGGLES)) {
-      if (process.env[envVar] !== "true") {
-        disabled.push(extName);
-      }
-    }
+    const disabled = getToggleControlledCapabilities()
+      .filter((capsule) => process.env[capsule.toggleEnvVar] !== "true")
+      .map((capsule) => `${capsule.id} (${capsule.toggleEnvVar})`);
 
     if (disabled.length > 0) {
       ctx.ui.notify(
