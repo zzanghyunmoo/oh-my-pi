@@ -1,0 +1,102 @@
+{
+  "$schema": "./profile-pack.schema.json",
+  "schemaVersion": "0.1.0",
+  "id": "proxy-provider",
+  "displayName": "Quotio proxy provider",
+  "description": "Profile for machines that should register the Quotio LiteLLM/OpenAI-compatible provider while keeping endpoint and API key values local-only.",
+  "extends": ["default"],
+  "packageRefs": [
+    {
+      "name": "oh-my-pi",
+      "installSpec": "git:github.com/zzanghyunmoo/oh-my-pi",
+      "source": "package-json",
+      "required": true,
+      "intent": "core-package"
+    },
+    {
+      "name": "pi-clear",
+      "installSpec": "npm:pi-clear",
+      "source": "manual-signal",
+      "required": false,
+      "intent": "recent-manual-signal"
+    }
+  ],
+  "piPackage": {
+    "extensions": [
+      "./extensions/env-loader",
+      "./extensions/quotio-provider",
+      "./extensions/workspace-connectors",
+      "./extensions/setup-doctor"
+    ],
+    "prompts": ["./prompts"],
+    "themes": ["./themes"]
+  },
+  "extensionToggles": [
+    {
+      "extensionId": "env-loader",
+      "extensionPath": "./extensions/env-loader",
+      "enabledByDefault": true
+    },
+    {
+      "extensionId": "setup-doctor",
+      "extensionPath": "./extensions/setup-doctor",
+      "enabledByDefault": true
+    },
+    {
+      "extensionId": "quotio-provider",
+      "extensionPath": "./extensions/quotio-provider",
+      "enabledByDefault": true,
+      "toggleEnvVar": "ENABLE_QUOTIO",
+      "requiredValue": "true"
+    },
+    {
+      "extensionId": "workspace-connectors",
+      "extensionPath": "./extensions/workspace-connectors",
+      "enabledByDefault": false,
+      "toggleEnvVar": "ENABLE_WORKSPACE_CONNECTORS",
+      "requiredValue": "not-true"
+    }
+  ],
+  "secretRefs": [
+    {
+      "name": "ENABLE_QUOTIO",
+      "kind": "toggle",
+      "source": "docs/blueprints/oh-my-pi.secret-blueprint.json",
+      "requiredWhen": "Use this profile on a machine that should register the Quotio provider.",
+      "commitPolicy": "name-and-intent-only"
+    },
+    {
+      "name": "QUOTIO_BASE_URL",
+      "kind": "endpoint",
+      "source": "docs/blueprints/oh-my-pi.secret-blueprint.json",
+      "requiredWhen": "Required when ENABLE_QUOTIO is true.",
+      "commitPolicy": "never-commit-value"
+    },
+    {
+      "name": "QUOTIO_API_KEY",
+      "kind": "api-key",
+      "source": "docs/blueprints/oh-my-pi.secret-blueprint.json",
+      "requiredWhen": "Required when ENABLE_QUOTIO is true.",
+      "commitPolicy": "never-commit-value"
+    }
+  ],
+  "connectors": [],
+  "providers": [
+    {
+      "id": "quotio",
+      "adapter": "openai-compatible",
+      "enabledByDefault": true,
+      "toggleEnvVar": "ENABLE_QUOTIO",
+      "requiredSecretRefs": ["QUOTIO_BASE_URL", "QUOTIO_API_KEY"],
+      "statusCommand": "/quotio-status",
+      "modelDiscovery": "GET /models through extensions/provider-adapter-kit/openai-compatible.ts"
+    }
+  ],
+  "metadataRefs": {
+    "packageJson": "package.json",
+    "secretBlueprint": "docs/blueprints/oh-my-pi.secret-blueprint.json",
+    "capabilityRegistry": "extensions/capability-registry.ts",
+    "connectorCatalog": "extensions/connector-backend-catalog.ts",
+    "providerAdapterKit": "extensions/provider-adapter-kit/openai-compatible.ts"
+  }
+}

@@ -1,0 +1,121 @@
+{
+  "$schema": "./profile-pack.schema.json",
+  "schemaVersion": "0.1.0",
+  "id": "workspace",
+  "displayName": "Workspace connectors",
+  "description": "Profile for machines that should expose Linear, Notion, and read-only GitHub connector UX without committing OAuth state.",
+  "extends": ["default"],
+  "packageRefs": [
+    {
+      "name": "oh-my-pi",
+      "installSpec": "git:github.com/zzanghyunmoo/oh-my-pi",
+      "source": "package-json",
+      "required": true,
+      "intent": "core-package"
+    },
+    {
+      "name": "pi-web-access",
+      "installSpec": "npm:pi-web-access",
+      "source": "settings-example",
+      "required": false,
+      "intent": "external-pi-package",
+      "notes": "Existing settings.example.json external package intent."
+    },
+    {
+      "name": "super-pi",
+      "installSpec": "npm:@leing2021/super-pi",
+      "source": "settings-example",
+      "required": false,
+      "intent": "external-pi-package",
+      "notes": "Existing settings.example.json external package intent."
+    },
+    {
+      "name": "pi-clear",
+      "installSpec": "npm:pi-clear",
+      "source": "manual-signal",
+      "required": false,
+      "intent": "recent-manual-signal"
+    }
+  ],
+  "piPackage": {
+    "extensions": [
+      "./extensions/env-loader",
+      "./extensions/quotio-provider",
+      "./extensions/workspace-connectors",
+      "./extensions/setup-doctor"
+    ],
+    "prompts": ["./prompts"],
+    "themes": ["./themes"]
+  },
+  "extensionToggles": [
+    {
+      "extensionId": "env-loader",
+      "extensionPath": "./extensions/env-loader",
+      "enabledByDefault": true
+    },
+    {
+      "extensionId": "setup-doctor",
+      "extensionPath": "./extensions/setup-doctor",
+      "enabledByDefault": true
+    },
+    {
+      "extensionId": "workspace-connectors",
+      "extensionPath": "./extensions/workspace-connectors",
+      "enabledByDefault": true,
+      "toggleEnvVar": "ENABLE_WORKSPACE_CONNECTORS",
+      "requiredValue": "true"
+    },
+    {
+      "extensionId": "quotio-provider",
+      "extensionPath": "./extensions/quotio-provider",
+      "enabledByDefault": false,
+      "toggleEnvVar": "ENABLE_QUOTIO",
+      "requiredValue": "not-true"
+    }
+  ],
+  "secretRefs": [
+    {
+      "name": "ENABLE_WORKSPACE_CONNECTORS",
+      "kind": "toggle",
+      "source": "docs/blueprints/oh-my-pi.secret-blueprint.json",
+      "requiredWhen": "Use this profile on a machine that should expose Linear/Notion connector commands and tools.",
+      "commitPolicy": "name-and-intent-only"
+    }
+  ],
+  "connectors": [
+    {
+      "id": "linear",
+      "backendRef": "linear",
+      "enabledByDefault": true,
+      "auth": "oauth-state-local-only",
+      "loginCommand": "/connector-login linear",
+      "statusCommand": "/connector-tools linear",
+      "toolNames": ["workspace_mcp_list_tools", "workspace_mcp_call_tool"]
+    },
+    {
+      "id": "notion",
+      "backendRef": "notion",
+      "enabledByDefault": true,
+      "auth": "oauth-state-local-only",
+      "loginCommand": "/connector-login notion",
+      "statusCommand": "/connector-tools notion",
+      "toolNames": ["workspace_mcp_list_tools", "workspace_mcp_call_tool"]
+    },
+    {
+      "id": "github",
+      "backendRef": "github",
+      "enabledByDefault": true,
+      "auth": "local-gh-cli-session",
+      "statusCommand": "gh auth status --hostname github.com",
+      "toolNames": ["github_gh_cli"]
+    }
+  ],
+  "providers": [],
+  "metadataRefs": {
+    "packageJson": "package.json",
+    "secretBlueprint": "docs/blueprints/oh-my-pi.secret-blueprint.json",
+    "capabilityRegistry": "extensions/capability-registry.ts",
+    "connectorCatalog": "extensions/connector-backend-catalog.ts",
+    "providerAdapterKit": "extensions/provider-adapter-kit/openai-compatible.ts"
+  }
+}

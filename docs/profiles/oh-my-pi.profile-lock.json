@@ -1,0 +1,147 @@
+{
+  "$schema": "./profile-lock.schema.json",
+  "schemaVersion": "0.1.0",
+  "generatedBy": "node scripts/profile-pack.mjs lock --write",
+  "profileFiles": [
+    "docs/profiles/default.profile.json",
+    "docs/profiles/full.profile.json",
+    "docs/profiles/proxy-provider.profile.json",
+    "docs/profiles/workspace.profile.json"
+  ],
+  "profiles": [
+    {
+      "id": "default",
+      "source": "docs/profiles/default.profile.json",
+      "sha256": "d5514623f42ff05018a04d08d07f031d4ed13f3df3656455449faecb0543adc6",
+      "packages": [
+        "git:github.com/zzanghyunmoo/oh-my-pi",
+        "npm:pi-clear"
+      ],
+      "extensions": [
+        "./extensions/env-loader",
+        "./extensions/quotio-provider",
+        "./extensions/workspace-connectors",
+        "./extensions/setup-doctor"
+      ],
+      "enabledToggles": [],
+      "secretRefNames": [],
+      "connectors": [],
+      "providers": [],
+      "prompts": [
+        "./prompts"
+      ],
+      "themes": [
+        "./themes"
+      ]
+    },
+    {
+      "id": "full",
+      "source": "docs/profiles/full.profile.json",
+      "sha256": "357fdf21b62ab32df0ef99559096b1618613464aeb42ea281b5c9ba070918381",
+      "packages": [
+        "git:github.com/zzanghyunmoo/oh-my-pi",
+        "npm:pi-web-access",
+        "npm:@leing2021/super-pi",
+        "npm:pi-clear"
+      ],
+      "extensions": [
+        "./extensions/env-loader",
+        "./extensions/quotio-provider",
+        "./extensions/workspace-connectors",
+        "./extensions/setup-doctor"
+      ],
+      "enabledToggles": [
+        "ENABLE_WORKSPACE_CONNECTORS=true",
+        "ENABLE_QUOTIO=true"
+      ],
+      "secretRefNames": [
+        "ENABLE_WORKSPACE_CONNECTORS",
+        "ENABLE_QUOTIO",
+        "QUOTIO_BASE_URL",
+        "QUOTIO_API_KEY"
+      ],
+      "connectors": [
+        "linear",
+        "notion",
+        "github"
+      ],
+      "providers": [
+        "quotio"
+      ],
+      "prompts": [
+        "./prompts"
+      ],
+      "themes": [
+        "./themes"
+      ]
+    },
+    {
+      "id": "proxy-provider",
+      "source": "docs/profiles/proxy-provider.profile.json",
+      "sha256": "50ac0989a49fc0a9b58484917326eb335f0bbb53713e58886908a6ac435a3ed6",
+      "packages": [
+        "git:github.com/zzanghyunmoo/oh-my-pi",
+        "npm:pi-clear"
+      ],
+      "extensions": [
+        "./extensions/env-loader",
+        "./extensions/quotio-provider",
+        "./extensions/workspace-connectors",
+        "./extensions/setup-doctor"
+      ],
+      "enabledToggles": [
+        "ENABLE_QUOTIO=true"
+      ],
+      "secretRefNames": [
+        "ENABLE_QUOTIO",
+        "QUOTIO_BASE_URL",
+        "QUOTIO_API_KEY"
+      ],
+      "connectors": [],
+      "providers": [
+        "quotio"
+      ],
+      "prompts": [
+        "./prompts"
+      ],
+      "themes": [
+        "./themes"
+      ]
+    },
+    {
+      "id": "workspace",
+      "source": "docs/profiles/workspace.profile.json",
+      "sha256": "be3b7a6e2d6282b90ad34efa0223a75a909b7187e6e40075df50399a5ed55048",
+      "packages": [
+        "git:github.com/zzanghyunmoo/oh-my-pi",
+        "npm:pi-web-access",
+        "npm:@leing2021/super-pi",
+        "npm:pi-clear"
+      ],
+      "extensions": [
+        "./extensions/env-loader",
+        "./extensions/quotio-provider",
+        "./extensions/workspace-connectors",
+        "./extensions/setup-doctor"
+      ],
+      "enabledToggles": [
+        "ENABLE_WORKSPACE_CONNECTORS=true"
+      ],
+      "secretRefNames": [
+        "ENABLE_WORKSPACE_CONNECTORS"
+      ],
+      "connectors": [
+        "linear",
+        "notion",
+        "github"
+      ],
+      "providers": [],
+      "prompts": [
+        "./prompts"
+      ],
+      "themes": [
+        "./themes"
+      ]
+    }
+  ]
+}

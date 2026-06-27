@@ -1,0 +1,153 @@
+{
+  "$schema": "./profile-pack.schema.json",
+  "schemaVersion": "0.1.0",
+  "id": "full",
+  "displayName": "Full local distribution",
+  "description": "Full profile that combines workspace connectors, Quotio provider intent, prompts/themes, existing settings.example.json packages, and the recent pi-clear signal.",
+  "extends": ["workspace", "proxy-provider"],
+  "packageRefs": [
+    {
+      "name": "oh-my-pi",
+      "installSpec": "git:github.com/zzanghyunmoo/oh-my-pi",
+      "source": "package-json",
+      "required": true,
+      "intent": "core-package"
+    },
+    {
+      "name": "pi-web-access",
+      "installSpec": "npm:pi-web-access",
+      "source": "settings-example",
+      "required": false,
+      "intent": "external-pi-package",
+      "notes": "Existing settings.example.json external package intent."
+    },
+    {
+      "name": "super-pi",
+      "installSpec": "npm:@leing2021/super-pi",
+      "source": "settings-example",
+      "required": false,
+      "intent": "external-pi-package",
+      "notes": "Existing settings.example.json external package intent."
+    },
+    {
+      "name": "pi-clear",
+      "installSpec": "npm:pi-clear",
+      "source": "manual-signal",
+      "required": false,
+      "intent": "recent-manual-signal",
+      "notes": "Recent manual install signal: pi install npm:pi-clear."
+    }
+  ],
+  "piPackage": {
+    "extensions": [
+      "./extensions/env-loader",
+      "./extensions/quotio-provider",
+      "./extensions/workspace-connectors",
+      "./extensions/setup-doctor"
+    ],
+    "prompts": ["./prompts"],
+    "themes": ["./themes"]
+  },
+  "extensionToggles": [
+    {
+      "extensionId": "env-loader",
+      "extensionPath": "./extensions/env-loader",
+      "enabledByDefault": true
+    },
+    {
+      "extensionId": "setup-doctor",
+      "extensionPath": "./extensions/setup-doctor",
+      "enabledByDefault": true
+    },
+    {
+      "extensionId": "workspace-connectors",
+      "extensionPath": "./extensions/workspace-connectors",
+      "enabledByDefault": true,
+      "toggleEnvVar": "ENABLE_WORKSPACE_CONNECTORS",
+      "requiredValue": "true"
+    },
+    {
+      "extensionId": "quotio-provider",
+      "extensionPath": "./extensions/quotio-provider",
+      "enabledByDefault": true,
+      "toggleEnvVar": "ENABLE_QUOTIO",
+      "requiredValue": "true"
+    }
+  ],
+  "secretRefs": [
+    {
+      "name": "ENABLE_WORKSPACE_CONNECTORS",
+      "kind": "toggle",
+      "source": "docs/blueprints/oh-my-pi.secret-blueprint.json",
+      "requiredWhen": "Use this profile on a machine that should expose Linear/Notion connector commands and tools.",
+      "commitPolicy": "name-and-intent-only"
+    },
+    {
+      "name": "ENABLE_QUOTIO",
+      "kind": "toggle",
+      "source": "docs/blueprints/oh-my-pi.secret-blueprint.json",
+      "requiredWhen": "Use this profile on a machine that should register the Quotio provider.",
+      "commitPolicy": "name-and-intent-only"
+    },
+    {
+      "name": "QUOTIO_BASE_URL",
+      "kind": "endpoint",
+      "source": "docs/blueprints/oh-my-pi.secret-blueprint.json",
+      "requiredWhen": "Required when ENABLE_QUOTIO is true.",
+      "commitPolicy": "never-commit-value"
+    },
+    {
+      "name": "QUOTIO_API_KEY",
+      "kind": "api-key",
+      "source": "docs/blueprints/oh-my-pi.secret-blueprint.json",
+      "requiredWhen": "Required when ENABLE_QUOTIO is true.",
+      "commitPolicy": "never-commit-value"
+    }
+  ],
+  "connectors": [
+    {
+      "id": "linear",
+      "backendRef": "linear",
+      "enabledByDefault": true,
+      "auth": "oauth-state-local-only",
+      "loginCommand": "/connector-login linear",
+      "statusCommand": "/connector-tools linear",
+      "toolNames": ["workspace_mcp_list_tools", "workspace_mcp_call_tool"]
+    },
+    {
+      "id": "notion",
+      "backendRef": "notion",
+      "enabledByDefault": true,
+      "auth": "oauth-state-local-only",
+      "loginCommand": "/connector-login notion",
+      "statusCommand": "/connector-tools notion",
+      "toolNames": ["workspace_mcp_list_tools", "workspace_mcp_call_tool"]
+    },
+    {
+      "id": "github",
+      "backendRef": "github",
+      "enabledByDefault": true,
+      "auth": "local-gh-cli-session",
+      "statusCommand": "gh auth status --hostname github.com",
+      "toolNames": ["github_gh_cli"]
+    }
+  ],
+  "providers": [
+    {
+      "id": "quotio",
+      "adapter": "openai-compatible",
+      "enabledByDefault": true,
+      "toggleEnvVar": "ENABLE_QUOTIO",
+      "requiredSecretRefs": ["QUOTIO_BASE_URL", "QUOTIO_API_KEY"],
+      "statusCommand": "/quotio-status",
+      "modelDiscovery": "GET /models through extensions/provider-adapter-kit/openai-compatible.ts"
+    }
+  ],
+  "metadataRefs": {
+    "packageJson": "package.json",
+    "secretBlueprint": "docs/blueprints/oh-my-pi.secret-blueprint.json",
+    "capabilityRegistry": "extensions/capability-registry.ts",
+    "connectorCatalog": "extensions/connector-backend-catalog.ts",
+    "providerAdapterKit": "extensions/provider-adapter-kit/openai-compatible.ts"
+  }
+}

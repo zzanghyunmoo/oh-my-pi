@@ -5,6 +5,11 @@
   "description": "Personal Pi extensions, prompt templates, and themes.",
   "keywords": ["pi-package"],
   "type": "module",
+  "scripts": {
+    "profile:verify": "node scripts/profile-pack.mjs verify",
+    "profile:lock": "node scripts/profile-pack.mjs lock --write",
+    "profile:apply": "node scripts/profile-pack.mjs apply"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "typebox": "^1.1.38"
@@ -21,7 +26,8 @@
     "extensions": [
       "./extensions/env-loader",
       "./extensions/quotio-provider",
-      "./extensions/workspace-connectors"
+      "./extensions/workspace-connectors",
+      "./extensions/setup-doctor"
     ],
     "prompts": ["./prompts"],
     "themes": ["./themes"]

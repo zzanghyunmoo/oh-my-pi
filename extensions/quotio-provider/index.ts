@@ -1,6 +1,37 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import {
+  discoverOpenAICompatibleModels,
+  ProviderAdapterError,
+  toProviderModels,
+  type ProviderCapabilityContract,
+} from "../provider-adapter-kit/openai-compatible.js";
 
 const REQUIRED_ENV_VARS = ["QUOTIO_BASE_URL", "QUOTIO_API_KEY"] as const;
+const QUOTIO_TIMEOUT_MS = 10000;
+const QUOTIO_CAPABILITY_CONTRACT: ProviderCapabilityContract = {
+  rules: [
+    {
+      test: /claude|gpt-4o/,
+      capabilities: { input: ["text", "image"] },
+    },
+    {
+      test: /claude/,
+      capabilities: { contextWindow: 200000, maxTokens: 64000 },
+    },
+    {
+      test: /agentic|opus/,
+      capabilities: { reasoning: true },
+    },
+  ],
+};
+
+type NotifyLevel = "info" | "error";
+
+interface NotificationContext {
+  readonly ui: {
+    notify(message: string, level: NotifyLevel): void | Promise<void>;
+  };
+}
 
 function getMissingEnvVars(): string[] {
   return REQUIRED_ENV_VARS.filter(
@@ -8,48 +39,24 @@ function getMissingEnvVars(): string[] {
   );
 }
 
-interface QuotioModel {
-  id: string;
-  object: string;
-  created: number;
-  owned_by: string;
+function getQuotioConfig(): { readonly baseUrl: string; readonly apiKey: string } {
+  return {
+    baseUrl: process.env.QUOTIO_BASE_URL!.trim(),
+    apiKey: process.env.QUOTIO_API_KEY!.trim(),
+  };
 }
 
-async function fetchModels(baseUrl: string, apiKey: string): Promise<QuotioModel[]> {
-  const url = baseUrl.replace(/\/+$/, "") + "/models";
-  const response = await fetch(url, {
-    method: "GET",
-    headers: { Authorization: `Bearer ${apiKey}` },
-    signal: AbortSignal.timeout(10000),
-  });
-
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
-  }
-
-  const data = await response.json() as { data: QuotioModel[] };
-  return data.data ?? [];
-}
-
-function toProviderModels(models: QuotioModel[]) {
-  return models.map((m) => {
-    const isVisionCapable = m.id.includes("claude") || m.id.includes("gpt-4o");
-    const isLargeContext = m.id.includes("claude");
-    return {
-      id: m.id,
-      name: m.id.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" "),
-      reasoning: m.id.includes("agentic") || m.id.includes("opus"),
-      input: isVisionCapable ? ["text", "image"] : ["text"],
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      contextWindow: isLargeContext ? 200000 : 128000,
-      maxTokens: isLargeContext ? 64000 : 16384,
-    };
+async function discoverQuotioModels(baseUrl: string, apiKey: string) {
+  return discoverOpenAICompatibleModels({
+    baseUrl,
+    apiKey,
+    timeoutMs: QUOTIO_TIMEOUT_MS,
   });
 }
 
 export default function (pi: ExtensionAPI) {
   if (process.env.ENABLE_QUOTIO !== "true") return;
-  pi.on("session_start", async (_event, ctx) => {
+  pi.on("session_start", async (_event: unknown, ctx: NotificationContext) => {
     const missing = getMissingEnvVars();
 
     if (missing.length > 0) {
@@ -60,16 +67,18 @@ export default function (pi: ExtensionAPI) {
       return;
     }
 
-    const baseUrl = process.env.QUOTIO_BASE_URL!.trim();
-    const apiKey = process.env.QUOTIO_API_KEY!.trim();
+    const { baseUrl, apiKey } = getQuotioConfig();
 
     try {
-      const models = await fetchModels(baseUrl, apiKey);
-      const providerModels = toProviderModels(models);
+      const discovery = await discoverQuotioModels(baseUrl, apiKey);
+      const providerModels = toProviderModels(
+        discovery.models,
+        QUOTIO_CAPABILITY_CONTRACT,
+      );
 
       pi.registerProvider("quotio", {
         name: "Quotio",
-        baseUrl: baseUrl,
+        baseUrl: discovery.baseUrl,
         apiKey: apiKey,
         api: "openai-completions",
         models: providerModels,
@@ -89,7 +98,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerCommand("quotio-status", {
     description: "Check quotio proxy connectivity and list available models",
-    handler: async (_args, ctx) => {
+    handler: async (_args: string, ctx: NotificationContext) => {
       const missing = getMissingEnvVars();
       if (missing.length > 0) {
         ctx.ui.notify(
@@ -99,30 +108,25 @@ export default function (pi: ExtensionAPI) {
         return;
       }
 
-      const baseUrl = process.env.QUOTIO_BASE_URL!.trim();
-      const apiKey = process.env.QUOTIO_API_KEY!.trim();
-      const startTime = Date.now();
+      const { baseUrl, apiKey } = getQuotioConfig();
 
       try {
-        const models = await fetchModels(baseUrl, apiKey);
-        const elapsed = Date.now() - startTime;
+        const discovery = await discoverQuotioModels(baseUrl, apiKey);
 
-        const modelList = models.map((m) => `  - ${m.id}`).join("\n");
+        const modelList = discovery.models.map((m) => `  - ${m.id}`).join("\n");
         ctx.ui.notify(
-          `Quotio: Connected (${elapsed}ms), ${models.length} models:\n${modelList}`,
+          `Quotio: Connected (${discovery.elapsedMs}ms), ${discovery.models.length} models:\n${modelList}`,
           "info",
         );
       } catch (error: any) {
-        const elapsed = Date.now() - startTime;
-
-        if (error?.name === "TimeoutError" || error?.name === "AbortError") {
+        if (error instanceof ProviderAdapterError && error.kind === "timeout") {
           ctx.ui.notify(
-            `Quotio: Timed out after ${elapsed}ms. Check QUOTIO_BASE_URL.`,
+            `Quotio: Timed out after ${error.elapsedMs}ms. Check QUOTIO_BASE_URL.`,
             "error",
           );
-        } else if (error?.message?.includes("401") || error?.message?.includes("403")) {
+        } else if (error instanceof ProviderAdapterError && error.kind === "auth") {
           ctx.ui.notify(
-            `Quotio: Auth failed. Check QUOTIO_API_KEY.`,
+            "Quotio: Auth failed. Check QUOTIO_API_KEY.",
             "error",
           );
         } else {

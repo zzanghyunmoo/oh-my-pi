@@ -5,6 +5,7 @@ dist/
 auth.json
 sessions/
 .mcp-auth/
+.pi/
 .env
 .env.*
 

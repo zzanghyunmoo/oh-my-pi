@@ -1,0 +1,73 @@
+{
+  "$schema": "./profile-pack.schema.json",
+  "schemaVersion": "0.1.0",
+  "id": "default",
+  "displayName": "Default oh-my-pi",
+  "description": "Base profile for installing oh-my-pi with the env loader, setup doctor, prompts, themes, and the recent pi-clear external package signal recorded as optional intent.",
+  "packageRefs": [
+    {
+      "name": "oh-my-pi",
+      "installSpec": "git:github.com/zzanghyunmoo/oh-my-pi",
+      "source": "package-json",
+      "required": true,
+      "intent": "core-package",
+      "notes": "Core package represented by this repository."
+    },
+    {
+      "name": "pi-clear",
+      "installSpec": "npm:pi-clear",
+      "source": "manual-signal",
+      "required": false,
+      "intent": "recent-manual-signal",
+      "notes": "Recent manual install signal: pi install npm:pi-clear. Recorded as reproducible intent only."
+    }
+  ],
+  "piPackage": {
+    "extensions": [
+      "./extensions/env-loader",
+      "./extensions/quotio-provider",
+      "./extensions/workspace-connectors",
+      "./extensions/setup-doctor"
+    ],
+    "prompts": ["./prompts"],
+    "themes": ["./themes"]
+  },
+  "extensionToggles": [
+    {
+      "extensionId": "env-loader",
+      "extensionPath": "./extensions/env-loader",
+      "enabledByDefault": true,
+      "notes": "Always loaded first through package.json Pi extension order."
+    },
+    {
+      "extensionId": "setup-doctor",
+      "extensionPath": "./extensions/setup-doctor",
+      "enabledByDefault": true,
+      "notes": "Provides /oh-my-pi and /oh-my-pi-doctor read-only setup UX."
+    },
+    {
+      "extensionId": "quotio-provider",
+      "extensionPath": "./extensions/quotio-provider",
+      "enabledByDefault": false,
+      "toggleEnvVar": "ENABLE_QUOTIO",
+      "requiredValue": "not-true"
+    },
+    {
+      "extensionId": "workspace-connectors",
+      "extensionPath": "./extensions/workspace-connectors",
+      "enabledByDefault": false,
+      "toggleEnvVar": "ENABLE_WORKSPACE_CONNECTORS",
+      "requiredValue": "not-true"
+    }
+  ],
+  "secretRefs": [],
+  "connectors": [],
+  "providers": [],
+  "metadataRefs": {
+    "packageJson": "package.json",
+    "secretBlueprint": "docs/blueprints/oh-my-pi.secret-blueprint.json",
+    "capabilityRegistry": "extensions/capability-registry.ts",
+    "connectorCatalog": "extensions/connector-backend-catalog.ts",
+    "providerAdapterKit": "extensions/provider-adapter-kit/openai-compatible.ts"
+  }
+}
