@@ -34,7 +34,6 @@ interface CliConnectorBackend extends ConnectorBackendBase {
   readonly cli: {
     readonly command: "gh";
     readonly readOnlyToolName: "github_gh_cli";
-    readonly mutatingSubcommands: readonly string[];
   };
 }
 
@@ -109,7 +108,6 @@ export const connectorBackendCatalog = [
     cli: {
       command: "gh",
       readOnlyToolName: "github_gh_cli",
-      mutatingSubcommands: ["create", "edit", "delete", "close", "reopen", "merge", "ready", "lock", "unlock"],
     },
   },
   {
@@ -204,8 +202,6 @@ export function routeGitHubCliConnector() {
     statusGuidance: backend.statusGuidance,
     fallbackMessage: backend.fallbackMessage,
     command: backend.cli.command,
-    mutatingSubcommands: backend.cli.mutatingSubcommands,
-    mutationGuardMessage: "Refusing potentially mutating gh command from tool. Ask the user for explicit confirmation and run manually if needed.",
   };
 }
 

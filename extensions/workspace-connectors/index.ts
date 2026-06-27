@@ -11,6 +11,14 @@ import {
   routeWorkspaceMcpConnector,
   type WorkspaceMcpServiceName,
 } from "../connector-backend-catalog.js";
+import {
+  formatRuntimeSafetyPolicyGuidelines,
+  getConnectorRuntimeSafetyPolicy,
+  getGithubGhCliMutationGuardMessage,
+  getToolRuntimeSafetyPolicy,
+  isBlockedGithubGhCliInvocation,
+  summarizeRuntimeSafetyPolicy,
+} from "../runtime-safety-policy-ledger.js";
 
 type ServiceName = WorkspaceMcpServiceName;
 type NotifyLevel = "info" | "error";
@@ -96,6 +104,9 @@ export default function (pi: ExtensionAPI) {
   const loginUsage = formatWorkspaceMcpUsage("/connector-login");
   const toolsUsage = formatWorkspaceMcpUsage("/connector-tools");
   const githubRoute = routeGitHubCliConnector();
+  const listToolsPolicy = getToolRuntimeSafetyPolicy("workspace_mcp_list_tools");
+  const callToolPolicy = getToolRuntimeSafetyPolicy("workspace_mcp_call_tool");
+  const githubGhCliPolicy = getToolRuntimeSafetyPolicy("github_gh_cli");
 
   pi.on("session_start", async (_event: unknown, ctx: NotificationContext) => {
     ctx.ui.notify(
@@ -153,6 +164,7 @@ export default function (pi: ExtensionAPI) {
     promptGuidelines: [
       "Use workspace_mcp_list_tools before calling an unfamiliar Linear or Notion MCP tool.",
       `If a Linear or Notion connector reports authentication errors, use the catalog guidance: ${WORKSPACE_MCP_SERVICE_IDS.map((service) => routeWorkspaceMcpConnector(service).authGuidance).join(" ")}`,
+      ...formatRuntimeSafetyPolicyGuidelines(listToolsPolicy),
     ],
     parameters: Type.Object({
       service: Type.Union([Type.Literal("linear"), Type.Literal("notion")], {
@@ -171,7 +183,13 @@ export default function (pi: ExtensionAPI) {
               text: tools.map((tool: any) => `${tool.name}: ${tool.description ?? ""}`).join("\n") || "No tools returned.",
             },
           ],
-          details: { service, backend: route.description, tools },
+          details: {
+            service,
+            backend: route.description,
+            safetyPolicy: summarizeRuntimeSafetyPolicy(listToolsPolicy),
+            connectorSafetyPolicy: summarizeRuntimeSafetyPolicy(getConnectorRuntimeSafetyPolicy(service)),
+            tools,
+          },
         };
       } catch (error: any) {
         throw new Error(`Failed to list ${route.label} tools: ${error?.message ?? String(error)} ${route.fallbackMessage}`);
@@ -187,6 +205,7 @@ export default function (pi: ExtensionAPI) {
     promptGuidelines: [
       "Use workspace_mcp_call_tool only after identifying the exact tool name and argument schema from workspace_mcp_list_tools or user-provided context.",
       "Before using workspace_mcp_call_tool for destructive writes, ask the user for confirmation unless they explicitly requested the change.",
+      ...formatRuntimeSafetyPolicyGuidelines(callToolPolicy),
     ],
     parameters: Type.Object({
       service: Type.Union([Type.Literal("linear"), Type.Literal("notion")], {
@@ -209,7 +228,14 @@ export default function (pi: ExtensionAPI) {
 
         return {
           content: [{ type: "text", text: stringifyMcpContent(result) }],
-          details: { service, backend: route.description, toolName: params.toolName, result },
+          details: {
+            service,
+            backend: route.description,
+            toolName: params.toolName,
+            safetyPolicy: summarizeRuntimeSafetyPolicy(callToolPolicy),
+            connectorSafetyPolicy: summarizeRuntimeSafetyPolicy(getConnectorRuntimeSafetyPolicy(service)),
+            result,
+          },
         };
       } catch (error: any) {
         throw new Error(`Failed to call ${route.label} MCP tool ${params.toolName}: ${error?.message ?? String(error)} ${route.fallbackMessage}`);
@@ -226,6 +252,7 @@ export default function (pi: ExtensionAPI) {
       githubRoute.authGuidance,
       "Use github_gh_cli for GitHub access when the user wants login-based GitHub integration without API keys.",
       "github_gh_cli is intended for read-only gh commands. Ask for confirmation before proposing any GitHub mutation.",
+      ...formatRuntimeSafetyPolicyGuidelines(githubGhCliPolicy),
     ],
     parameters: Type.Object({
       args: Type.Array(Type.String(), {
@@ -234,8 +261,8 @@ export default function (pi: ExtensionAPI) {
     }),
     async execute(_toolCallId: string, params: GitHubGhCliParams, signal: AbortSignal) {
       const args = params.args;
-      if (args.some((arg) => githubRoute.mutatingSubcommands.some((mutating) => mutating === arg))) {
-        throw new Error(githubRoute.mutationGuardMessage);
+      if (isBlockedGithubGhCliInvocation(args)) {
+        throw new Error(getGithubGhCliMutationGuardMessage());
       }
 
       const output = await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
@@ -254,7 +281,13 @@ export default function (pi: ExtensionAPI) {
 
       return {
         content: [{ type: "text", text: output.stdout || output.stderr || `${githubRoute.command} command completed with no output.` }],
-        details: { args, stdout: output.stdout, stderr: output.stderr },
+        details: {
+          args,
+          safetyPolicy: summarizeRuntimeSafetyPolicy(githubGhCliPolicy),
+          connectorSafetyPolicy: summarizeRuntimeSafetyPolicy(getConnectorRuntimeSafetyPolicy("github")),
+          stdout: output.stdout,
+          stderr: output.stderr,
+        },
       };
     },
   });
