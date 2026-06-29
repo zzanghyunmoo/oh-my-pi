@@ -19,62 +19,136 @@
     "metadataRefs"
   ],
   "properties": {
-    "$schema": { "type": "string", "minLength": 1 },
-    "schemaVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
-    "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
-    "displayName": { "type": "string", "minLength": 1 },
-    "description": { "type": "string", "minLength": 1 },
+    "$schema": {
+      "type": "string",
+      "minLength": 1
+    },
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "displayName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
     "extends": {
       "type": "array",
-      "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*$"
+      },
       "uniqueItems": true
     },
     "packageRefs": {
       "type": "array",
       "minItems": 1,
-      "items": { "$ref": "#/$defs/packageRef" },
+      "items": {
+        "$ref": "#/$defs/packageRef"
+      },
       "uniqueItems": true
     },
     "piPackage": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["extensions", "prompts", "themes"],
+      "required": [
+        "extensions",
+        "prompts",
+        "themes"
+      ],
       "properties": {
-        "extensions": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
-        "prompts": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
-        "themes": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true }
+        "extensions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "prompts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "themes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
       }
     },
     "extensionToggles": {
       "type": "array",
-      "items": { "$ref": "#/$defs/extensionToggle" },
+      "items": {
+        "$ref": "#/$defs/extensionToggle"
+      },
       "uniqueItems": true
     },
     "secretRefs": {
       "type": "array",
-      "items": { "$ref": "#/$defs/secretRef" },
+      "items": {
+        "$ref": "#/$defs/secretRef"
+      },
       "uniqueItems": true
     },
     "connectors": {
       "type": "array",
-      "items": { "$ref": "#/$defs/connector" },
+      "items": {
+        "$ref": "#/$defs/connector"
+      },
       "uniqueItems": true
     },
     "providers": {
       "type": "array",
-      "items": { "$ref": "#/$defs/provider" },
+      "items": {
+        "$ref": "#/$defs/provider"
+      },
       "uniqueItems": true
     },
     "metadataRefs": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["packageJson", "secretBlueprint", "capabilityRegistry", "connectorCatalog", "providerAdapterKit"],
+      "required": [
+        "packageJson",
+        "secretBlueprint",
+        "capabilityRegistry",
+        "connectorCatalog",
+        "providerAdapterKit"
+      ],
       "properties": {
-        "packageJson": { "type": "string", "minLength": 1 },
-        "secretBlueprint": { "type": "string", "minLength": 1 },
-        "capabilityRegistry": { "type": "string", "minLength": 1 },
-        "connectorCatalog": { "type": "string", "minLength": 1 },
-        "providerAdapterKit": { "type": "string", "minLength": 1 }
+        "packageJson": {
+          "type": "string",
+          "minLength": 1
+        },
+        "secretBlueprint": {
+          "type": "string",
+          "minLength": 1
+        },
+        "capabilityRegistry": {
+          "type": "string",
+          "minLength": 1
+        },
+        "connectorCatalog": {
+          "type": "string",
+          "minLength": 1
+        },
+        "providerAdapterKit": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     }
   },
@@ -82,67 +156,256 @@
     "packageRef": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "installSpec", "source", "required", "intent"],
+      "required": [
+        "name",
+        "installSpec",
+        "source",
+        "required",
+        "intent"
+      ],
       "properties": {
-        "name": { "type": "string", "minLength": 1 },
-        "installSpec": { "type": "string", "minLength": 1 },
-        "source": { "type": "string", "enum": ["package-json", "settings-example", "manual-signal"] },
-        "required": { "type": "boolean" },
-        "intent": { "type": "string", "enum": ["core-package", "external-pi-package", "recent-manual-signal"] },
-        "notes": { "type": "string" }
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "installSpec": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "package-json",
+            "settings-example",
+            "manual-signal"
+          ]
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "intent": {
+          "type": "string",
+          "enum": [
+            "core-package",
+            "external-pi-package",
+            "recent-manual-signal"
+          ]
+        },
+        "notes": {
+          "type": "string"
+        }
       }
     },
     "extensionToggle": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["extensionId", "extensionPath", "enabledByDefault"],
+      "required": [
+        "extensionId",
+        "extensionPath",
+        "enabledByDefault"
+      ],
       "properties": {
-        "extensionId": { "type": "string", "minLength": 1 },
-        "extensionPath": { "type": "string", "minLength": 1 },
-        "enabledByDefault": { "type": "boolean" },
-        "toggleEnvVar": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
-        "requiredValue": { "type": "string", "enum": ["true", "not-true"] },
-        "notes": { "type": "string" }
+        "extensionId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "extensionPath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "enabledByDefault": {
+          "type": "boolean"
+        },
+        "toggleEnvVar": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        "requiredValue": {
+          "type": "string",
+          "enum": [
+            "true",
+            "not-true"
+          ]
+        },
+        "notes": {
+          "type": "string"
+        }
       }
     },
     "secretRef": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "kind", "source", "requiredWhen", "commitPolicy"],
+      "required": [
+        "name",
+        "kind",
+        "source",
+        "requiredWhen",
+        "commitPolicy"
+      ],
       "properties": {
-        "name": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
-        "kind": { "type": "string", "enum": ["toggle", "endpoint", "api-key", "oauth-state"] },
-        "source": { "type": "string", "minLength": 1 },
-        "requiredWhen": { "type": "string", "minLength": 1 },
-        "commitPolicy": { "type": "string", "enum": ["name-and-intent-only", "never-commit-value", "never-commit-oauth-state"] }
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "toggle",
+            "endpoint",
+            "api-key",
+            "oauth-state"
+          ]
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "requiredWhen": {
+          "type": "string",
+          "minLength": 1
+        },
+        "commitPolicy": {
+          "type": "string",
+          "enum": [
+            "name-and-intent-only",
+            "never-commit-value",
+            "never-commit-oauth-state"
+          ]
+        }
       }
     },
     "connector": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "backendRef", "enabledByDefault", "auth"],
+      "required": [
+        "id",
+        "backendRef",
+        "enabledByDefault",
+        "auth"
+      ],
       "properties": {
-        "id": { "type": "string", "minLength": 1 },
-        "backendRef": { "type": "string", "minLength": 1 },
-        "enabledByDefault": { "type": "boolean" },
-        "auth": { "type": "string", "minLength": 1 },
-        "loginCommand": { "type": "string" },
-        "statusCommand": { "type": "string" },
-        "toolNames": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true }
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "backendRef": {
+          "type": "string",
+          "minLength": 1
+        },
+        "enabledByDefault": {
+          "type": "boolean"
+        },
+        "auth": {
+          "type": "string",
+          "minLength": 1
+        },
+        "loginCommand": {
+          "type": "string"
+        },
+        "statusCommand": {
+          "type": "string"
+        },
+        "toolNames": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "tenant": {
+          "type": "string",
+          "enum": [
+            "personal",
+            "company"
+          ]
+        },
+        "capabilitySlot": {
+          "type": "string",
+          "enum": [
+            "issue-tracker",
+            "wiki",
+            "git"
+          ]
+        },
+        "setupModes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "full",
+              "selective",
+              "minimal"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "exposureState": {
+          "type": "string",
+          "enum": [
+            "runtime-tool",
+            "runtime-gated",
+            "setup-only"
+          ]
+        },
+        "authOwnership": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "pi-oauth",
+              "env-fallback",
+              "external-cli",
+              "setup-only"
+            ]
+          },
+          "uniqueItems": true
+        }
       }
     },
     "provider": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "adapter", "enabledByDefault", "toggleEnvVar", "requiredSecretRefs", "statusCommand"],
+      "required": [
+        "id",
+        "adapter",
+        "enabledByDefault",
+        "toggleEnvVar",
+        "requiredSecretRefs",
+        "statusCommand"
+      ],
       "properties": {
-        "id": { "type": "string", "minLength": 1 },
-        "adapter": { "type": "string", "minLength": 1 },
-        "enabledByDefault": { "type": "boolean" },
-        "toggleEnvVar": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
-        "requiredSecretRefs": { "type": "array", "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" }, "uniqueItems": true },
-        "statusCommand": { "type": "string", "minLength": 1 },
-        "modelDiscovery": { "type": "string", "minLength": 1 }
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "adapter": {
+          "type": "string",
+          "minLength": 1
+        },
+        "enabledByDefault": {
+          "type": "boolean"
+        },
+        "toggleEnvVar": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        "requiredSecretRefs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]*$"
+          },
+          "uniqueItems": true
+        },
+        "statusCommand": {
+          "type": "string",
+          "minLength": 1
+        },
+        "modelDiscovery": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     }
   }

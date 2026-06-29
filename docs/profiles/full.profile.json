@@ -3,8 +3,11 @@
   "schemaVersion": "0.1.0",
   "id": "full",
   "displayName": "Full local distribution",
-  "description": "Full profile that combines workspace connectors, Quotio provider intent, prompts/themes, existing settings.example.json packages, and the recent pi-clear signal.",
-  "extends": ["workspace", "proxy-provider"],
+  "description": "Full profile that combines personal/company workspace connector intent, Quotio provider intent, prompts/themes, existing settings.example.json packages, and the recent pi-clear signal.",
+  "extends": [
+    "workspace",
+    "proxy-provider"
+  ],
   "packageRefs": [
     {
       "name": "oh-my-pi",
@@ -45,8 +48,12 @@
       "./extensions/workspace-connectors",
       "./extensions/setup-doctor"
     ],
-    "prompts": ["./prompts"],
-    "themes": ["./themes"]
+    "prompts": [
+      "./prompts"
+    ],
+    "themes": [
+      "./themes"
+    ]
   },
   "extensionToggles": [
     {
@@ -108,28 +115,124 @@
     {
       "id": "linear",
       "backendRef": "linear",
+      "tenant": "personal",
+      "capabilitySlot": "issue-tracker",
+      "setupModes": [
+        "full",
+        "selective"
+      ],
+      "exposureState": "runtime-tool",
       "enabledByDefault": true,
       "auth": "oauth-state-local-only",
-      "loginCommand": "/connector-login linear",
+      "authOwnership": [
+        "pi-oauth",
+        "env-fallback"
+      ],
       "statusCommand": "/connector-tools linear",
-      "toolNames": ["workspace_mcp_list_tools", "workspace_mcp_call_tool"]
+      "toolNames": [
+        "workspace_mcp_list_tools",
+        "workspace_mcp_call_tool"
+      ],
+      "loginCommand": "/connector-login linear"
     },
     {
       "id": "notion",
       "backendRef": "notion",
+      "tenant": "personal",
+      "capabilitySlot": "wiki",
+      "setupModes": [
+        "full",
+        "selective"
+      ],
+      "exposureState": "runtime-tool",
       "enabledByDefault": true,
       "auth": "oauth-state-local-only",
-      "loginCommand": "/connector-login notion",
+      "authOwnership": [
+        "pi-oauth",
+        "env-fallback"
+      ],
       "statusCommand": "/connector-tools notion",
-      "toolNames": ["workspace_mcp_list_tools", "workspace_mcp_call_tool"]
+      "toolNames": [
+        "workspace_mcp_list_tools",
+        "workspace_mcp_call_tool"
+      ],
+      "loginCommand": "/connector-login notion"
     },
     {
       "id": "github",
       "backendRef": "github",
+      "tenant": "personal",
+      "capabilitySlot": "git",
+      "setupModes": [
+        "full",
+        "selective"
+      ],
+      "exposureState": "runtime-tool",
       "enabledByDefault": true,
       "auth": "local-gh-cli-session",
+      "authOwnership": [
+        "external-cli"
+      ],
       "statusCommand": "gh auth status --hostname github.com",
-      "toolNames": ["github_gh_cli"]
+      "toolNames": [
+        "github_gh_cli"
+      ]
+    },
+    {
+      "id": "gitlab",
+      "backendRef": "gitlab",
+      "tenant": "company",
+      "capabilitySlot": "git",
+      "setupModes": [
+        "full",
+        "selective"
+      ],
+      "exposureState": "runtime-tool",
+      "enabledByDefault": true,
+      "auth": "local-glab-cli-session",
+      "authOwnership": [
+        "external-cli"
+      ],
+      "statusCommand": "glab auth status",
+      "toolNames": [
+        "gitlab_glab_cli"
+      ]
+    },
+    {
+      "id": "jira",
+      "backendRef": "jira",
+      "tenant": "company",
+      "capabilitySlot": "issue-tracker",
+      "setupModes": [
+        "full",
+        "selective"
+      ],
+      "exposureState": "runtime-gated",
+      "enabledByDefault": true,
+      "auth": "setup-visible-runtime-gated",
+      "authOwnership": [
+        "setup-only"
+      ],
+      "statusCommand": "/connector-setup full",
+      "toolNames": []
+    },
+    {
+      "id": "confluence",
+      "backendRef": "confluence",
+      "tenant": "company",
+      "capabilitySlot": "wiki",
+      "setupModes": [
+        "full",
+        "selective"
+      ],
+      "exposureState": "runtime-gated",
+      "enabledByDefault": true,
+      "auth": "setup-visible-runtime-gated",
+      "authOwnership": [
+        "setup-only"
+      ],
+      "statusCommand": "/connector-setup full",
+      "toolNames": []
     }
   ],
   "providers": [
@@ -138,7 +241,10 @@
       "adapter": "openai-compatible",
       "enabledByDefault": true,
       "toggleEnvVar": "ENABLE_QUOTIO",
-      "requiredSecretRefs": ["QUOTIO_BASE_URL", "QUOTIO_API_KEY"],
+      "requiredSecretRefs": [
+        "QUOTIO_BASE_URL",
+        "QUOTIO_API_KEY"
+      ],
       "statusCommand": "/quotio-status",
       "modelDiscovery": "GET /models through extensions/provider-adapter-kit/openai-compatible.ts"
     }

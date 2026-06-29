@@ -97,6 +97,12 @@ export const capabilityRegistry: readonly CapabilityCapsule[] = [
         secret: true,
         description: "Alternative Notion integration token env var accepted by the workspace connector.",
       },
+      {
+        name: "GITLAB_HOST",
+        requiredWhen: "optional host selector when the company GitLab instance is not the glab default context",
+        secret: false,
+        description: "GitLab host used to scope glab auth status and read-only CLI calls.",
+      },
     ],
     exposes: {
       commands: ["connector-login", "connector-status", "connector-logout", "connector-tools"],
@@ -104,6 +110,7 @@ export const capabilityRegistry: readonly CapabilityCapsule[] = [
         "workspace_mcp_list_tools",
         "workspace_mcp_call_tool",
         "github_gh_cli",
+        "gitlab_glab_cli",
       ],
     },
     safetyClass: "external-workspace",
@@ -111,7 +118,7 @@ export const capabilityRegistry: readonly CapabilityCapsule[] = [
       "Reports connector commands and tools at session start when enabled.",
       "Uses direct browser OAuth with locally stored tokens for Linear and Notion instead of committed secrets.",
       "Falls back to configured access-key environment variables when OAuth tokens are unavailable.",
-      "The GitHub CLI bridge refuses known mutating gh subcommands from tool execution.",
+      "The GitHub and GitLab CLI bridges use fail-closed read-only allowlists before tool execution.",
     ],
   },
   {
@@ -120,12 +127,13 @@ export const capabilityRegistry: readonly CapabilityCapsule[] = [
     extensionPath: "./extensions/setup-doctor",
     envVars: [],
     exposes: {
-      commands: ["oh-my-pi-doctor", "oh-my-pi"],
+      commands: ["oh-my-pi-doctor", "oh-my-pi", "connector-setup"],
     },
     safetyClass: "local-configuration",
     diagnostics: [
       "Summarizes CWD .env, capability toggles, connector/provider metadata, runtime safety policies, gh auth, and local-only paths.",
       "Provides a lightweight /oh-my-pi command palette for setup and profile verification commands.",
+      "Registers /connector-setup as the always-available connector setup bootstrap surface.",
     ],
   },
 ];

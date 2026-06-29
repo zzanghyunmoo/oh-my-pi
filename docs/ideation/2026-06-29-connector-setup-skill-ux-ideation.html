@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ideation: Connector Setup Skill UX</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f4ef;
+      --surface: #fffdf8;
+      --surface-2: #f1ebe2;
+      --text: #27231f;
+      --muted: #6d6257;
+      --line: #ded4c8;
+      --accent: #2563eb;
+      --accent-soft: #dbeafe;
+      --accent-text: #1e3a8a;
+      --success: #047857;
+      --success-soft: #d1fae5;
+      --warn: #b45309;
+      --warn-soft: #fef3c7;
+      --danger: #b91c1c;
+      --danger-soft: #fee2e2;
+      --code-bg: #eee6da;
+      --shadow: 0 18px 50px rgba(39, 35, 31, 0.10);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #151413;
+        --surface: #1f1d1a;
+        --surface-2: #292620;
+        --text: #f4eee7;
+        --muted: #c0b5a8;
+        --line: #3e3932;
+        --accent: #93c5fd;
+        --accent-soft: #172554;
+        --accent-text: #dbeafe;
+        --success: #86efac;
+        --success-soft: #052e1d;
+        --warn: #fbbf24;
+        --warn-soft: #422006;
+        --danger: #fca5a5;
+        --danger-soft: #450a0a;
+        --code-bg: #2c2924;
+        --shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at top left, var(--accent-soft), transparent 28rem), var(--bg);
+      color: var(--text);
+      font: 16px/1.62 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .page { max-width: 980px; margin: 0 auto; padding: 48px 22px 64px; }
+    header.hero {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      padding: 34px;
+      box-shadow: var(--shadow);
+    }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent-text);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    h1, h2, h3 { line-height: 1.18; margin: 0; }
+    h1 { font-size: clamp(2rem, 5vw, 4.1rem); letter-spacing: -0.055em; margin-top: 18px; max-width: 12ch; }
+    h2 { font-size: 1.65rem; letter-spacing: -0.025em; margin-bottom: 18px; }
+    h3 { font-size: 1.2rem; letter-spacing: -0.01em; }
+    p { max-width: 74ch; margin: 10px 0 0; }
+    strong { color: inherit; }
+    code { background: var(--code-bg); padding: .12em .36em; border-radius: 7px; font-size: .92em; }
+    .meta-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 28px; }
+    .meta-item { background: var(--surface-2); border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; }
+    .meta-item dt { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; font-weight: 800; }
+    .meta-item dd { margin: 5px 0 0; font-weight: 700; }
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 18px 0 0; }
+    .stat { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 16px; }
+    .stat b { display: block; font-size: 1.55rem; line-height: 1; }
+    .stat span { display: block; color: var(--muted); font-size: .9rem; margin-top: 6px; }
+    section { margin-top: 34px; background: var(--surface); border: 1px solid var(--line); border-radius: 24px; padding: 28px; }
+    .axes { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; padding: 0; list-style: none; }
+    .axes li { border: 1px solid var(--line); border-radius: 15px; padding: 12px; background: var(--surface-2); font-weight: 700; }
+    .jump-list { display: grid; gap: 8px; padding: 0; list-style: none; margin: 0 0 22px; }
+    .jump-list a { display: block; color: var(--accent-text); text-decoration: none; background: var(--accent-soft); border-radius: 12px; padding: 10px 12px; font-weight: 700; }
+    article.idea { border: 1px solid var(--line); border-radius: 22px; padding: 22px; margin-top: 18px; background: linear-gradient(180deg, var(--surface), var(--surface-2)); }
+    .idea-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .rank { display: inline-flex; align-items: center; justify-content: center; min-width: 38px; height: 38px; border-radius: 999px; background: var(--accent); color: #fff; font-weight: 900; }
+    .title-row { display: flex; gap: 12px; align-items: center; }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .chip { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; padding: 5px 10px; background: var(--surface); font-size: 12px; font-weight: 800; }
+    .chip.conf { background: var(--success-soft); color: var(--success); border-color: transparent; }
+    .chip.cx { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+    dl.idea-fields { display: grid; grid-template-columns: 130px 1fr; gap: 12px 18px; margin: 18px 0 0; }
+    dl.idea-fields dt { color: var(--muted); font-weight: 900; font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; }
+    dl.idea-fields dd { margin: 0; }
+    .visual { margin: 18px 0 6px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); padding: 12px; overflow-x: auto; }
+    svg { max-width: 100%; height: auto; display: block; }
+    .svg-label { font: 700 13px ui-sans-serif, system-ui, sans-serif; fill: var(--text); }
+    .svg-small { font: 600 11px ui-sans-serif, system-ui, sans-serif; fill: var(--muted); }
+    .svg-box { fill: var(--surface-2); stroke: var(--line); stroke-width: 1.3; }
+    .svg-accent { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.6; }
+    .svg-success { fill: var(--success-soft); stroke: var(--success); stroke-width: 1.4; }
+    .svg-warn { fill: var(--warn-soft); stroke: var(--warn); stroke-width: 1.4; }
+    table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+    th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+    th { color: var(--muted); text-transform: uppercase; letter-spacing: .08em; font-size: .72rem; }
+    tbody tr:last-child td { border-bottom: 0; }
+    .composition-signal { color: var(--muted); font-size: .86rem; margin-top: 28px; text-align: center; }
+    @media (max-width: 760px) {
+      .meta-grid, .stats, .axes { grid-template-columns: 1fr; }
+      dl.idea-fields { grid-template-columns: 1fr; }
+      header.hero, section { padding: 22px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="hero">
+      <span class="eyebrow">Ideation</span>
+      <h1>Connector Setup Skill UX</h1>
+      <p>oh-my-pi의 connector-login/logout/setup을 skill-style UX로 끌어올리고, 회사용 Jira·Confluence·GitLab CLI와 개인용 Linear·Notion·GitHub를 안전하게 공존시키기 위한 아이디어 후보를 비판적으로 좁힌 문서입니다.</p>
+      <dl class="meta-grid">
+        <div class="meta-item"><dt>Date</dt><dd><time datetime="2026-06-29">2026-06-29</time></dd></div>
+        <div class="meta-item"><dt>Topic</dt><dd>connector-setup-skill-ux</dd></div>
+        <div class="meta-item"><dt>Focus</dt><dd>company/personal connectors, full/selective/minimal setup</dd></div>
+        <div class="meta-item"><dt>Mode</dt><dd>repo-grounded</dd></div>
+      </dl>
+      <div class="stats" aria-label="ideation counts">
+        <div class="stat"><b>47</b><span>raw candidates</span></div>
+        <div class="stat"><b>5</b><span>ranked survivors</span></div>
+        <div class="stat"><b>5</b><span>topic axes covered</span></div>
+        <div class="stat"><b>42</b><span>ideas cut</span></div>
+      </div>
+    </header>
+
+    <section id="grounding-context">
+      <h2>Grounding Context</h2>
+      <p><strong>Codebase Context.</strong> oh-my-pi는 Pi용 TypeScript 확장 패키지이며 현재 `env-loader`, `workspace-connectors`, `quotio-provider`, `setup-doctor`를 포함합니다. 현재 커넥터 surface는 Linear/Notion의 browser OAuth MCP와 GitHub read-only `gh` CLI 브리지에 초점이 있습니다.</p>
+      <p>현재 명령은 <code>/connector-login linear|notion</code>, <code>/connector-status [linear|notion]</code>, <code>/connector-logout linear|notion</code>, <code>/connector-tools linear|notion</code>이며, 도구는 <code>workspace_mcp_list_tools</code>, <code>workspace_mcp_call_tool</code>, <code>github_gh_cli</code>입니다. `connector-backend-catalog.ts`는 OAuth MCP, CLI, provider backend를 구분하지만 CLI adapter는 지금 GitHub `gh-cli`에 고정되어 있습니다.</p>
+      <p><strong>Past Learnings.</strong> `/connector-login`은 terminal-owning CLI에 위임하지 않고 direct browser OAuth + loopback callback으로 구현해야 한다는 선례가 있습니다. 런타임 tool은 interactive auth를 시작하면 안 되고, 기존 credential을 재사용하거나 setup guidance로 실패해야 합니다. 프로필은 secret-free dry-run intent여야 하며 CWD `.env`와 `ENABLE_*` toggle이 활성화 패턴입니다.</p>
+      <p><strong>External Context.</strong> `gh`와 `glab`는 이미 CLI auth/login/status/logout 패턴이 잘 문서화되어 있고, Atlassian은 API token/OAuth/CLI surface가 있으나 terminal-agent용 Jira+Confluence 통합 패턴은 상대적으로 덜 표준화되어 있습니다. MCP/agent prior art는 interactive setup과 non-interactive tool execution을 분리하는 쪽으로 수렴합니다.</p>
+    </section>
+
+    <section id="topic-axes">
+      <h2>Topic Axes</h2>
+      <ul class="axes">
+        <li>Invocation surface</li>
+        <li>Backend/catalog model</li>
+        <li>Setup profiles</li>
+        <li>Auth/local-state safety</li>
+        <li>Diagnostics/tool exposure</li>
+      </ul>
+    </section>
+
+    <section id="ranked-ideas">
+      <h2>Ranked Ideas</h2>
+      <ul class="jump-list" aria-label="Ranked idea jump list">
+        <li><a href="#idea-1">1. Connector Setup Control Plane</a></li>
+        <li><a href="#idea-2">2. Capability Graph + Profile Algebra</a></li>
+        <li><a href="#idea-3">3. Auth Passport + Scoped Logout</a></li>
+        <li><a href="#idea-4">4. Readiness-Gated Tool Affordances</a></li>
+        <li><a href="#idea-5">5. Atlassian/GitLab Staged Entry</a></li>
+      </ul>
+
+      <article class="idea" id="idea-1">
+        <div class="idea-head">
+          <div class="title-row"><span class="rank">1</span><h3>Connector Setup Control Plane</h3></div>
+          <div class="chips"><span class="chip">Axis: invocation surface</span><span class="chip conf">Confidence 88%</span><span class="chip cx">Complexity Medium</span></div>
+        </div>
+        <div class="visual" aria-label="control plane diagram">
+          <svg viewBox="0 0 760 220" role="img">
+            <defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"></path></marker></defs>
+            <rect class="svg-accent" x="24" y="36" width="190" height="148" rx="18"></rect>
+            <text class="svg-label" x="52" y="78">skill:connector-setup</text>
+            <text class="svg-small" x="52" y="104">full · selective · minimal</text>
+            <text class="svg-small" x="52" y="128">human setup control plane</text>
+            <rect class="svg-box" x="286" y="28" width="160" height="54" rx="14"></rect>
+            <text class="svg-label" x="318" y="60">login cards</text>
+            <rect class="svg-box" x="286" y="96" width="160" height="54" rx="14"></rect>
+            <text class="svg-label" x="318" y="128">status diff</text>
+            <rect class="svg-box" x="286" y="164" width="160" height="40" rx="14"></rect>
+            <text class="svg-label" x="320" y="190">logout preview</text>
+            <line x1="222" y1="75" x2="276" y2="55" stroke="var(--accent)" stroke-width="2" marker-end="url(#arrow)"></line>
+            <line x1="222" y1="110" x2="276" y2="123" stroke="var(--accent)" stroke-width="2" marker-end="url(#arrow)"></line>
+            <line x1="222" y1="146" x2="276" y2="184" stroke="var(--accent)" stroke-width="2" marker-end="url(#arrow)"></line>
+            <rect class="svg-success" x="520" y="46" width="190" height="116" rx="18"></rect>
+            <text class="svg-label" x="548" y="88">non-interactive tools</text>
+            <text class="svg-small" x="548" y="114">reuse ready credentials</text>
+            <text class="svg-small" x="548" y="138">fail with setup guidance</text>
+            <line x1="456" y1="121" x2="510" y2="104" stroke="var(--success)" stroke-width="2" marker-end="url(#arrow)"></line>
+          </svg>
+        </div>
+        <dl class="idea-fields">
+          <dt>Description</dt><dd>하나의 primary surface를 만든다: <code>skill:connector-setup</code> 또는 <code>/connector-setup</code>. 여기서 full/selective/minimal을 선택하고, login/status/logout은 그 안에서 “다음 안전한 human action card”로 노출한다. 기존 전문가용 slash command는 남겨두되, 사용자가 기억해야 할 entrypoint는 setup control plane 하나가 된다.</dd>
+          <dt>Basis</dt><dd><strong>direct:</strong> 현재 README와 setup doctor는 `/connector-login`, `/connector-status`, `/connector-logout`, `/connector-tools`, profile dry-run, command palette로 setup 동작이 분산되어 있음을 보여준다. <strong>external:</strong> agent connector prior art는 interactive setup과 non-interactive tool execution을 분리한다.</dd>
+          <dt>Rationale</dt><dd>사용자의 요구는 “커넥터 셋업을 skill처럼 쓰고 싶다”는 UX 요구와 “full/selective/minimal”이라는 setup mode 요구가 결합된 것이다. control plane은 이 둘을 한 surface로 묶으면서 runtime tool이 OAuth를 시작하지 않는 기존 안전 원칙을 보존한다.</dd>
+          <dt>Downsides</dt><dd>명령/스킬/doctor/profile의 역할 경계가 다시 정의되어야 한다. 처음부터 너무 자동화하면 dry-run·secret-free 원칙을 흔들 수 있어, 초기 버전은 checklist/receipt 중심이어야 한다.</dd>
+        </dl>
+      </article>
+
+      <article class="idea" id="idea-2">
+        <div class="idea-head">
+          <div class="title-row"><span class="rank">2</span><h3>Capability Graph + Profile Algebra</h3></div>
+          <div class="chips"><span class="chip">Axis: backend/catalog model</span><span class="chip conf">Confidence 86%</span><span class="chip cx">Complexity High</span></div>
+        </div>
+        <div class="visual" aria-label="capability graph diagram">
+          <svg viewBox="0 0 760 240" role="img">
+            <rect class="svg-accent" x="34" y="28" width="164" height="184" rx="18"></rect>
+            <text class="svg-label" x="64" y="66">capability slots</text>
+            <text class="svg-small" x="64" y="96">issue-tracker</text>
+            <text class="svg-small" x="64" y="122">wiki</text>
+            <text class="svg-small" x="64" y="148">git</text>
+            <text class="svg-small" x="64" y="174">provider</text>
+            <rect class="svg-box" x="288" y="34" width="170" height="74" rx="16"></rect>
+            <text class="svg-label" x="324" y="68">company</text>
+            <text class="svg-small" x="316" y="92">Jira · Confluence · glab</text>
+            <rect class="svg-box" x="288" y="132" width="170" height="74" rx="16"></rect>
+            <text class="svg-label" x="326" y="166">personal</text>
+            <text class="svg-small" x="315" y="190">Linear · Notion · gh</text>
+            <rect class="svg-success" x="558" y="58" width="150" height="120" rx="18"></rect>
+            <text class="svg-label" x="588" y="98">setup modes</text>
+            <text class="svg-small" x="588" y="124">full = all</text>
+            <text class="svg-small" x="588" y="148">minimal = -issue/-wiki/-git</text>
+            <line x1="208" y1="120" x2="278" y2="72" stroke="var(--accent)" stroke-width="2"></line>
+            <line x1="208" y1="120" x2="278" y2="168" stroke="var(--accent)" stroke-width="2"></line>
+            <line x1="468" y1="72" x2="548" y2="105" stroke="var(--success)" stroke-width="2"></line>
+            <line x1="468" y1="168" x2="548" y2="136" stroke="var(--success)" stroke-width="2"></line>
+          </svg>
+        </div>
+        <dl class="idea-fields">
+          <dt>Description</dt><dd>catalog를 service-name list가 아니라 capability graph로 확장한다. `issue-tracker`, `wiki`, `git`, `provider` 같은 capability slot에 tenant(`company`, `personal`), backend kind(OAuth MCP, CLI, provider), auth strategy, setup mode membership, runtime safety policy를 붙인다. profile은 고정 JSON 이름의 조합이 아니라 algebra가 된다: <code>full = company + personal</code>, <code>minimal = base - issue-tracker - wiki - git</code>.</dd>
+          <dt>Basis</dt><dd><strong>direct:</strong> 현재 catalog는 <code>oauth-mcp | cli | provider</code> backend kind를 이미 구분하지만 <code>WORKSPACE_MCP_SERVICE_IDS</code>와 command parser는 OAuth MCP인 Linear/Notion에만 묶여 있다. GitHub는 별도 <code>gh-cli</code> route helper로 존재한다.</dd>
+          <dt>Rationale</dt><dd>Jira/Confluence/GitLab을 Linear/Notion 모양으로 억지 확장하면 명령, setup doctor, profile, prompt snippet이 다시 drift한다. capability graph는 “회사 issue-tracker는 Jira, 개인 issue-tracker는 Linear”처럼 사용자의 언어를 catalog의 언어로 바꾼다.</dd>
+          <dt>Downsides</dt><dd>가장 구조적인 변화라 초기 구현 부담이 크다. 기존 profile schema, capability registry, runtime safety ledger와의 호환 계층이 필요할 수 있다.</dd>
+        </dl>
+      </article>
+
+      <article class="idea" id="idea-3">
+        <div class="idea-head">
+          <div class="title-row"><span class="rank">3</span><h3>Auth Passport + Scoped Logout</h3></div>
+          <div class="chips"><span class="chip">Axis: auth/local-state safety</span><span class="chip conf">Confidence 84%</span><span class="chip cx">Complexity Medium</span></div>
+        </div>
+        <dl class="idea-fields">
+          <dt>Description</dt><dd>각 connector의 auth source와 local-state ownership을 “passport”로 보여준다: <code>oauth-store</code>, <code>cwd-env-key</code>, <code>gh-cli-session</code>, <code>glab-cli-session</code>, <code>api-token-guidance</code>, <code>not-configured</code>. `/connector-logout personal:*` 같은 scoped logout은 실행 전 blast radius를 보여준다: 어떤 로컬 OAuth entry를 지우고, 어떤 `.env` key와 CLI session은 건드리지 않는지.</dd>
+          <dt>Basis</dt><dd><strong>direct:</strong> 현재 auth state는 <code>~/.pi/agent/workspace-connectors-auth.json</code>에 저장되고, auth file은 0700/0600 권한으로 다뤄진다. 현재 logout은 OAuth state만 지우고 access-key env vars는 그대로 둔다. README와 secret blueprint는 OAuth/cache/session state와 `.env`를 local-only로 분리한다.</dd>
+          <dt>Rationale</dt><dd>회사/개인 credential이 한 머신에 공존하면 “로그아웃”은 단순한 기능이 아니라 신뢰 경계다. passport는 status, setup, logout, runtime error가 같은 auth provenance vocabulary를 공유하게 만든다.</dd>
+          <dt>Downsides</dt><dd>외부 CLI 세션(`gh`, `glab`)은 Pi가 직접 소유하지 않으므로 passport가 “관찰/가이드”와 “관리/삭제”를 엄격히 구분해야 한다. 이 경계가 흐리면 오히려 사용자가 더 불안해질 수 있다.</dd>
+        </dl>
+      </article>
+
+      <article class="idea" id="idea-4">
+        <div class="idea-head">
+          <div class="title-row"><span class="rank">4</span><h3>Readiness-Gated Tool Affordances</h3></div>
+          <div class="chips"><span class="chip">Axis: diagnostics/tool exposure</span><span class="chip conf">Confidence 78%</span><span class="chip cx">Complexity High</span></div>
+        </div>
+        <div class="visual" aria-label="readiness gates diagram">
+          <svg viewBox="0 0 760 190" role="img">
+            <rect class="svg-box" x="32" y="42" width="126" height="80" rx="16"></rect>
+            <text class="svg-label" x="64" y="78">setup</text>
+            <text class="svg-small" x="54" y="102">full/selective/minimal</text>
+            <rect class="svg-accent" x="220" y="42" width="138" height="80" rx="16"></rect>
+            <text class="svg-label" x="252" y="78">readiness</text>
+            <text class="svg-small" x="246" y="102">ready · hidden · gated</text>
+            <rect class="svg-success" x="420" y="28" width="132" height="54" rx="14"></rect>
+            <text class="svg-label" x="456" y="62">safe read</text>
+            <rect class="svg-warn" x="420" y="104" width="132" height="54" rx="14"></rect>
+            <text class="svg-label" x="448" y="138">confirm write</text>
+            <rect class="svg-box" x="610" y="62" width="116" height="70" rx="16"></rect>
+            <text class="svg-label" x="642" y="94">tool</text>
+            <text class="svg-small" x="632" y="116">or setup hint</text>
+            <line x1="168" y1="82" x2="210" y2="82" stroke="var(--accent)" stroke-width="2"></line>
+            <line x1="368" y1="82" x2="410" y2="55" stroke="var(--success)" stroke-width="2"></line>
+            <line x1="368" y1="94" x2="410" y2="130" stroke="var(--warn)" stroke-width="2"></line>
+            <line x1="562" y1="55" x2="600" y2="84" stroke="var(--success)" stroke-width="2"></line>
+            <line x1="562" y1="130" x2="600" y2="108" stroke="var(--warn)" stroke-width="2"></line>
+          </svg>
+        </div>
+        <dl class="idea-fields">
+          <dt>Description</dt><dd>tool exposure를 “extension이 켜졌으면 무조건 등록”에서 “setup receipt와 readiness gate가 허용한 affordance만 노출”로 바꾼다. 최소 setup은 issue/wiki/git 도구를 실제로 숨기고, selective/full은 connector별로 read-only, confirm-write, not-configured, hidden-by-mode 같은 상태를 tool card로 제공한다.</dd>
+          <dt>Basis</dt><dd><strong>direct:</strong> 현재 <code>workspace_mcp_list_tools</code>, <code>workspace_mcp_call_tool</code>, <code>github_gh_cli</code>가 LLM-callable tool로 등록되고, MCP call tool은 exact schema와 destructive write confirmation을 요구한다. setup doctor는 connector catalog, runtime safety ledger, gh auth를 이미 요약한다.</dd>
+          <dt>Rationale</dt><dd>커넥터 수가 늘어나면 “tool은 보이는데 auth가 안 됨” 또는 “minimal인데 agent가 GitLab을 제안함” 같은 UX debt가 커진다. readiness-gated affordance는 tool visibility 자체를 setup/safety의 산출물로 만든다.</dd>
+          <dt>Downsides</dt><dd>Pi extension API의 active tools 관리와 prompt snippets 갱신 타이밍을 신중히 다뤄야 한다. 너무 많이 숨기면 assistant가 setup guidance조차 못 찾을 수 있어, hidden과 setup-hint의 균형이 필요하다.</dd>
+        </dl>
+      </article>
+
+      <article class="idea" id="idea-5">
+        <div class="idea-head">
+          <div class="title-row"><span class="rank">5</span><h3>Atlassian/GitLab Staged Entry</h3></div>
+          <div class="chips"><span class="chip">Axis: setup profiles</span><span class="chip conf">Confidence 80%</span><span class="chip cx">Complexity Medium</span></div>
+        </div>
+        <dl class="idea-fields">
+          <dt>Description</dt><dd>회사 stack을 한 번에 완성하려 하지 말고 단계적으로 들인다. GitLab은 이미 인증된 <code>glab</code>를 전제로 GitHub `gh` 패턴을 복제한 read-only CLI backend로 시작한다. Jira/Confluence는 catalog와 setup/profile에는 보이게 하되, 안전한 auth route(API token env, OAuth, CLI/API bridge)가 선택될 때까지 runtime tool은 gated 상태로 둔다.</dd>
+          <dt>Basis</dt><dd><strong>direct:</strong> 현재 GitHub는 <code>backendKind: "cli"</code>, <code>adapterKind: "gh-cli"</code>, read-only <code>github_gh_cli</code>로 존재한다. <strong>external:</strong> GitLab `glab` auth/status는 잘 문서화되어 있고, Atlassian은 API token/OAuth/CLI surface가 있으나 terminal-agent pattern은 덜 표준화되어 있다.</dd>
+          <dt>Rationale</dt><dd>가장 확실한 회사 connector value는 GitLab CLI에서 즉시 얻고, 가장 불확실한 Jira/Confluence runtime auth는 setup-visible/runtime-gated로 안전하게 탐색한다. 이렇게 하면 회사 stack 요구를 충족하면서도 Atlassian 쪽에서 성급한 auth 설계를 하지 않는다.</dd>
+          <dt>Downsides</dt><dd>Atlassian 사용자는 “왜 setup에는 보이는데 도구는 아직 안 되나”를 궁금해할 수 있다. staged 상태의 문구와 next action이 매우 명확해야 한다.</dd>
+        </dl>
+      </article>
+    </section>
+
+    <section id="rejection-summary">
+      <h2>Rejection Summary</h2>
+      <table>
+        <thead><tr><th>#</th><th>Idea</th><th>Reason Rejected</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>Connector setup cockpit as a skill</td><td>Absorbed into stronger synthesis: Connector Setup Control Plane.</td></tr>
+          <tr><td>2</td><td>Capability-first invocation</td><td>Absorbed into Capability Graph + Profile Algebra.</td></tr>
+          <tr><td>3</td><td>Backend Catalog v2 graph</td><td>Absorbed into Capability Graph + Profile Algebra.</td></tr>
+          <tr><td>4</td><td>Atlassian shared auth realm</td><td>Useful detail, but better handled inside Atlassian/GitLab Staged Entry and catalog brainstorming.</td></tr>
+          <tr><td>5</td><td>Profile facets</td><td>Absorbed into Capability Graph + Profile Algebra.</td></tr>
+          <tr><td>6</td><td>Secret-free activation receipt</td><td>Absorbed into Auth Passport + Scoped Logout.</td></tr>
+          <tr><td>7</td><td>Logout scoped local-state map</td><td>Absorbed into Auth Passport + Scoped Logout.</td></tr>
+          <tr><td>8</td><td>Connector exposure matrix</td><td>Absorbed into Readiness-Gated Tool Affordances.</td></tr>
+          <tr><td>9</td><td>Minimal setup as negative capability</td><td>Strong sub-concept, covered by Capability Graph + Profile Algebra.</td></tr>
+          <tr><td>10</td><td>Catalog by capability role</td><td>Duplicate of stronger capability graph direction.</td></tr>
+          <tr><td>11</td><td>Receipt-only setup wizard</td><td>Subsumed by Connector Setup Control Plane and Auth Passport.</td></tr>
+          <tr><td>12</td><td>Browser OAuth queue and CLI probes</td><td>Subsumed by Connector Setup Control Plane and staged backend entry.</td></tr>
+          <tr><td>13</td><td>Logout as scoped forgetting</td><td>Duplicate of Auth Passport + Scoped Logout.</td></tr>
+          <tr><td>14</td><td>Auth provenance badges</td><td>Sub-concept of Auth Passport.</td></tr>
+          <tr><td>15</td><td>Ghosted tools</td><td>Sub-concept of Readiness-Gated Tool Affordances.</td></tr>
+          <tr><td>16</td><td>Atlassian one workspace identity</td><td>Duplicate of staged Atlassian direction.</td></tr>
+          <tr><td>17</td><td>Skill-native setup cards</td><td>Subsumed by Connector Setup Control Plane.</td></tr>
+          <tr><td>18</td><td>Connector catalog capability graph</td><td>Duplicate of Capability Graph + Profile Algebra.</td></tr>
+          <tr><td>19</td><td>Setup profiles as bundle algebra</td><td>Duplicate of Capability Graph + Profile Algebra.</td></tr>
+          <tr><td>20</td><td>Auth passport with logout preview</td><td>Duplicate of Auth Passport + Scoped Logout.</td></tr>
+          <tr><td>21</td><td>Tool exposure affordance map</td><td>Duplicate of Readiness-Gated Tool Affordances.</td></tr>
+          <tr><td>22</td><td>Strategy-aware connector-login</td><td>Sound but narrower than Connector Setup Control Plane.</td></tr>
+          <tr><td>23</td><td>Setup doctor desired-state diff</td><td>Sound but narrower than Connector Setup Control Plane.</td></tr>
+          <tr><td>24</td><td>Tenant-aware aliases</td><td>Sound sub-concept of Capability Graph + Profile Algebra.</td></tr>
+          <tr><td>25</td><td>Control-plane/data-plane analogy</td><td>Good framing, but less concrete than Connector Setup Control Plane.</td></tr>
+          <tr><td>26</td><td>Pharmacy formulary catalog</td><td>Metaphor is useful but less actionable than capability graph.</td></tr>
+          <tr><td>27</td><td>Package resolver profiles</td><td>Duplicate of profile algebra.</td></tr>
+          <tr><td>28</td><td>Kubernetes-style contexts</td><td>Useful analogy, covered by tenant-aware capability graph.</td></tr>
+          <tr><td>29</td><td>Logout as lease termination</td><td>Duplicate of scoped logout.</td></tr>
+          <tr><td>30</td><td>Cockpit annunciator diagnostics</td><td>Useful visual metaphor, covered by control plane and readiness gates.</td></tr>
+          <tr><td>31</td><td>Tool cards as circulation slips</td><td>Metaphor is weaker than readiness-gated tool cards.</td></tr>
+          <tr><td>32</td><td>Tax-prep setup interview</td><td>Subsumed by setup control plane.</td></tr>
+          <tr><td>33</td><td>Skill primary, commands escape hatches</td><td>Duplicate of Connector Setup Control Plane.</td></tr>
+          <tr><td>34</td><td>Capability slots</td><td>Duplicate of capability graph.</td></tr>
+          <tr><td>35</td><td>Scoped local-state reset</td><td>Duplicate of Auth Passport + Scoped Logout.</td></tr>
+          <tr><td>36</td><td>Local passport receipt</td><td>Duplicate of Auth Passport + Scoped Logout.</td></tr>
+          <tr><td>37</td><td>Diagnostics next-action navigation</td><td>Subsumed by Connector Setup Control Plane.</td></tr>
+          <tr><td>38</td><td>Explicit negative capability</td><td>Sub-concept of profile algebra.</td></tr>
+          <tr><td>39</td><td>GitLab zero-login CLI backend</td><td>Sound but better kept as part of Atlassian/GitLab Staged Entry.</td></tr>
+          <tr><td>40</td><td>Atlassian setup-only until auth chosen</td><td>Sound but better kept as part of Atlassian/GitLab Staged Entry.</td></tr>
+          <tr><td>41</td><td>Brokered workspace intent</td><td>Interesting but abstract; better as later brainstorm variant of readiness-gated affordances.</td></tr>
+          <tr><td>42</td><td>Browser OAuth as catalog capability</td><td>Sound but narrower than Capability Graph + Profile Algebra.</td></tr>
+        </tbody>
+      </table>
+      <p>No topic axis ended with zero survivors; axis spread was preserved across the final set.</p>
+    </section>
+
+    <footer class="composition-signal">Composed 2026-06-29T07:52:26Z by ce-ideate from the user's connector setup request and oh-my-pi codebase grounding.</footer>
+  </main>
+</body>
+</html>

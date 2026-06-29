@@ -168,11 +168,48 @@ export const runtimeSafetyPolicyLedger = [
     ],
     approval: {
       expectation: "blocked-in-tool",
-      guidance: "Known mutating gh subcommands are blocked in-tool; after explicit confirmation, run them manually outside this tool if needed.",
+      guidance: "The GitHub CLI bridge enforces a read-only allowlist and blocks write-like commands in-tool; after explicit confirmation, use a manual path outside this tool if needed.",
     },
     promptGuidelines: [
       "Treat github_gh_cli as a read-only bridge over the user's authenticated gh session.",
       "Do not use github_gh_cli for repository, issue, PR, release, or workflow mutations.",
+    ],
+  },
+
+  {
+    id: "connector.gitlab-glab-cli",
+    targetKind: "connector",
+    targetName: "gitlab",
+    safetyClass: "external-workspace",
+    accessMode: "read-only",
+    allowlistHints: [
+      {
+        kind: "operation-intent",
+        values: ["auth status", "repo view", "repo list", "issue list", "issue view", "mr list", "mr view", "api GET"],
+        guidance: "Use gitlab_glab_cli for authenticated GitLab reads that match the enforced allowlist grammar.",
+      },
+    ],
+    blocklistHints: [
+      {
+        kind: "operation-intent",
+        values: ["create", "update", "delete", "close", "reopen", "merge", "approve", "token", "secret", "variable", "pipeline run"],
+        guidance: "GitLab writes and token-revealing commands are refused inside the Pi tool boundary.",
+      },
+    ],
+    redactionGuidance: [
+      "Do not log glab auth tokens, GitLab PATs, CI tokens, or authorization headers.",
+      "Summarize private project output when full raw output is not required.",
+    ],
+    auditGuidance: [
+      "Record glab arguments, GitLab host/project scope, and executable provenance for troubleshooting, with credentials redacted.",
+    ],
+    approval: {
+      expectation: "blocked-in-tool",
+      guidance: "GitLab CLI writes are blocked in-tool; after explicit confirmation, use a manual path outside this read-only bridge if needed.",
+    },
+    promptGuidelines: [
+      "Treat gitlab_glab_cli as a read-only bridge over the user's authenticated glab session.",
+      "Do not use gitlab_glab_cli for repository, issue, MR, pipeline, variable, token, or release mutations.",
     ],
   },
   {
@@ -208,6 +245,42 @@ export const runtimeSafetyPolicyLedger = [
     },
     promptGuidelines: [
       "Never expose Quotio credentials in prompts, tool details, or notifications.",
+    ],
+  },
+
+  {
+    id: "tool.gitlab_glab_cli",
+    targetKind: "tool",
+    targetName: "gitlab_glab_cli",
+    safetyClass: "external-workspace",
+    accessMode: "read-only",
+    allowlistHints: [
+      {
+        kind: "operation-intent",
+        values: ["repo list", "repo view", "issue list", "issue view", "mr list", "mr view", "auth status", "api GET"],
+        guidance: "Read-only glab commands may proceed only when they match the tool's enforced allowlist grammar.",
+      },
+    ],
+    blocklistHints: [
+      {
+        kind: "operation-intent",
+        values: ["create", "update", "delete", "close", "reopen", "merge", "approve", "token", "secret", "variable", "pipeline run"],
+        guidance: "The runtime guard refuses write-like or token-revealing glab commands before spawn.",
+      },
+    ],
+    redactionGuidance: [
+      "Do not print glab auth tokens, GitLab PATs, CI tokens, or Authorization headers.",
+    ],
+    auditGuidance: [
+      "Keep glab args, executable provenance, exit code, stdout, and stderr in tool details only after credential redaction and output bounding.",
+    ],
+    approval: {
+      expectation: "blocked-in-tool",
+      guidance: "Write-like glab commands are refused by this tool even if confirmation is desired.",
+    },
+    promptGuidelines: [
+      "Use gitlab_glab_cli only for GitLab read commands backed by the user's local glab authentication.",
+      "Ask for confirmation before proposing any GitLab mutation, then use a manual path rather than this tool.",
     ],
   },
   {
@@ -290,7 +363,7 @@ export const runtimeSafetyPolicyLedger = [
       {
         kind: "gh-subcommand",
         values: GITHUB_GH_MUTATING_SUBCOMMANDS,
-        guidance: "The runtime guard refuses args containing any of these known mutating gh subcommands.",
+        guidance: "The runtime guard refuses write-like gh commands and the CLI bridge also enforces a read-only allowlist before spawn.",
       },
     ],
     redactionGuidance: [

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import workspaceConnectorsExtension from "./index.js";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { routeWorkspaceMcpConnector } from "../connector-backend-catalog.js";
+import { routeCliConnector, routeSetupOnlyConnector, routeWorkspaceMcpConnector } from "../connector-backend-catalog.js";
 import {
   clearOAuthState,
   getConnectorAuthPath,
@@ -33,18 +33,35 @@ async function withTempAuthPath<T>(fn: (path: string) => Promise<T> | T): Promis
   }
 }
 
+async function withTempSetupPath<T>(fn: (path: string) => Promise<T> | T): Promise<T> {
+  const previous = process.env.OH_MY_PI_CONNECTOR_SETUP_PATH;
+  const dir = await mkdtemp(join(tmpdir(), "oh-my-pi-setup-state-"));
+  const path = join(dir, "setup.json");
+  process.env.OH_MY_PI_CONNECTOR_SETUP_PATH = path;
+  try {
+    return await fn(path);
+  } finally {
+    if (previous === undefined) {
+      delete process.env.OH_MY_PI_CONNECTOR_SETUP_PATH;
+    } else {
+      process.env.OH_MY_PI_CONNECTOR_SETUP_PATH = previous;
+    }
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
 function registerExtension() {
   const previousToggle = process.env.ENABLE_WORKSPACE_CONNECTORS;
   process.env.ENABLE_WORKSPACE_CONNECTORS = "true";
   const commands = new Map<string, RegisteredCommand>();
-  const tools: string[] = [];
+  const tools = new Map<string, any>();
   const pi = {
     on: () => undefined,
     registerCommand: (name: string, options: unknown) => {
       commands.set(name, options as RegisteredCommand);
     },
     registerTool: (definition: { name: string }) => {
-      tools.push(definition.name);
+      tools.set(definition.name, definition);
     },
   } as unknown as ExtensionAPI;
 
@@ -66,13 +83,25 @@ test("connector catalog uses direct OAuth with access-key fallback metadata", ()
   const notion = routeWorkspaceMcpConnector("notion");
 
   assert.equal(linear.transportStrategy, "streamable-http");
+  assert.equal(linear.tenant, "personal");
+  assert.equal(linear.capabilitySlot, "issue-tracker");
   assert.deepEqual(linear.accessKeyEnvVars, ["LINEAR_API_KEY"]);
   assert.equal(linear.oauth.callbackPort, 3334);
   assert.match(linear.authGuidance, /browser OAuth/);
   assert.match(linear.legacyMcpRemoteLoginShellCommand, /mcp-remote-client/);
 
   assert.deepEqual(notion.accessKeyEnvVars, ["NOTION_API_KEY", "NOTION_TOKEN"]);
+  assert.equal(notion.capabilitySlot, "wiki");
   assert.equal(notion.oauth.callbackPort, 3335);
+
+  const gitlab = routeCliConnector("gitlab");
+  assert.equal(gitlab.tenant, "company");
+  assert.equal(gitlab.capabilitySlot, "git");
+  assert.equal(gitlab.command, "glab");
+
+  const jira = routeSetupOnlyConnector("jira");
+  assert.equal(jira.runtimeStatus, "runtime-gated");
+  assert.equal(jira.capabilitySlot, "issue-tracker");
 });
 
 test("resolveAccessKey follows service-specific env fallback order", () => {
@@ -163,10 +192,25 @@ test("extension registers direct-auth commands and connector tools", () => {
   assert.ok(commands.has("connector-status"));
   assert.ok(commands.has("connector-logout"));
   assert.ok(commands.has("connector-tools"));
-  assert.deepEqual(tools.sort(), ["github_gh_cli", "workspace_mcp_call_tool", "workspace_mcp_list_tools"].sort());
+  assert.deepEqual(Array.from(tools.keys()).sort(), ["github_gh_cli", "gitlab_glab_cli", "workspace_mcp_call_tool", "workspace_mcp_list_tools"].sort());
 });
 
 test("connector-login invalid service preserves usage output without starting auth", async () => {
+  const { commands } = registerExtension();
+  const notifications: Array<{ message: string; level: string | undefined }> = [];
+  const command = commands.get("connector-login");
+  assert.ok(command);
+
+  await command.handler("unknown", {
+    ui: {
+      notify: (message: string, level?: string) => notifications.push({ message, level }),
+    },
+  });
+
+  assert.deepEqual(notifications, [{ message: "Usage: /connector-login linear|notion", level: "error" }]);
+});
+
+test("connector-login staged service returns setup guidance without starting auth", async () => {
   const { commands } = registerExtension();
   const notifications: Array<{ message: string; level: string | undefined }> = [];
   const command = commands.get("connector-login");
@@ -178,7 +222,9 @@ test("connector-login invalid service preserves usage output without starting au
     },
   });
 
-  assert.deepEqual(notifications, [{ message: "Usage: /connector-login linear|notion", level: "error" }]);
+  assert.equal(notifications.length, 1);
+  assert.equal(notifications[0]?.level, "info");
+  assert.match(notifications[0]?.message ?? "", /runtime-gated/);
 });
 
 test("connector-status supports all-services summary without network calls", async () => {
@@ -199,5 +245,90 @@ test("connector-status supports all-services summary without network calls", asy
     assert.match(notifications[0]?.message ?? "", /Linear/);
     assert.match(notifications[0]?.message ?? "", /Notion/);
     assert.match(notifications[0]?.message ?? "", /not authenticated/);
+  });
+});
+
+test("connector-logout previews before clearing OAuth state", async () => {
+  await withTempAuthPath(async (path) => {
+    await writeFile(path, JSON.stringify({
+      version: 1,
+      services: {
+        linear: {
+          oauth: {
+            tokens: {
+              access_token: "oauth_access",
+              token_type: "Bearer",
+            },
+          },
+        },
+      },
+    }));
+
+    const { commands } = registerExtension();
+    const command = commands.get("connector-logout");
+    assert.ok(command);
+    const notifications: Array<{ message: string; level: string | undefined }> = [];
+    const ctx = {
+      ui: {
+        notify: (message: string, level?: string) => notifications.push({ message, level }),
+      },
+    };
+
+    await command.handler("linear", ctx);
+    assert.match(notifications[notifications.length - 1]?.message ?? "", /Connector logout preview/);
+    assert.match(await readFile(path, "utf-8"), /oauth_access/);
+
+    await command.handler("linear --confirm", ctx);
+    assert.match(notifications[notifications.length - 1]?.message ?? "", /Connector logout result/);
+    await assert.rejects(() => readFile(path, "utf-8"));
+  });
+});
+
+test("workspace_mcp_call_tool refuses write-like and unknown tool names without confirmation", async () => {
+  const { tools } = registerExtension();
+  const tool = tools.get("workspace_mcp_call_tool");
+  assert.ok(tool);
+
+  await assert.rejects(
+    () => tool.execute("tool-call", { service: "linear", toolName: "createIssue", arguments: {} }),
+    /without explicit confirmation intent/,
+  );
+  await assert.rejects(
+    () => tool.execute("tool-call", { service: "linear", toolName: "syncIssue", arguments: {} }),
+    /without explicit confirmation intent/,
+  );
+});
+
+test("runtime tools require connector setup before backend execution", async () => {
+  await withTempSetupPath(async () => {
+    const { tools } = registerExtension();
+    const tool = tools.get("github_gh_cli");
+    assert.ok(tool);
+
+    await assert.rejects(
+      () => tool.execute("tool-call", { args: ["repo", "view", "OWNER/REPO"] }, new AbortController().signal),
+      /not-configured/,
+    );
+  });
+});
+
+test("connector-status reports malformed setup state with recovery guidance", async () => {
+  await withTempSetupPath(async (path) => {
+    await writeFile(path, "{not-json", "utf-8");
+    const { commands } = registerExtension();
+    const notifications: Array<{ message: string; level: string | undefined }> = [];
+    const command = commands.get("connector-status");
+    assert.ok(command);
+
+    await command.handler("", {
+      ui: {
+        notify: (message: string, level?: string) => notifications.push({ message, level }),
+      },
+    });
+
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]?.level, "error");
+    assert.match(notifications[0]?.message ?? "", /malformed/);
+    assert.match(notifications[0]?.message ?? "", /\/connector-setup/);
   });
 });
