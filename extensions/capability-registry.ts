@@ -78,9 +78,28 @@ export const capabilityRegistry: readonly CapabilityCapsule[] = [
     name: "Workspace Connectors",
     extensionPath: "./extensions/workspace-connectors",
     toggleEnvVar: "ENABLE_WORKSPACE_CONNECTORS",
-    envVars: [],
+    envVars: [
+      {
+        name: "LINEAR_API_KEY",
+        requiredWhen: "optional fallback when browser OAuth is unavailable for Linear",
+        secret: true,
+        description: "Linear API key used as bearer-token fallback for the Linear MCP endpoint.",
+      },
+      {
+        name: "NOTION_API_KEY",
+        requiredWhen: "optional fallback when browser OAuth is unavailable for Notion",
+        secret: true,
+        description: "Notion integration token used as bearer-token fallback for the Notion MCP endpoint.",
+      },
+      {
+        name: "NOTION_TOKEN",
+        requiredWhen: "optional fallback when browser OAuth is unavailable for Notion",
+        secret: true,
+        description: "Alternative Notion integration token env var accepted by the workspace connector.",
+      },
+    ],
     exposes: {
-      commands: ["connector-login", "connector-tools"],
+      commands: ["connector-login", "connector-status", "connector-logout", "connector-tools"],
       tools: [
         "workspace_mcp_list_tools",
         "workspace_mcp_call_tool",
@@ -90,7 +109,8 @@ export const capabilityRegistry: readonly CapabilityCapsule[] = [
     safetyClass: "external-workspace",
     diagnostics: [
       "Reports connector commands and tools at session start when enabled.",
-      "Uses mcp-remote OAuth flows for Linear and Notion instead of committed secrets.",
+      "Uses direct browser OAuth with locally stored tokens for Linear and Notion instead of committed secrets.",
+      "Falls back to configured access-key environment variables when OAuth tokens are unavailable.",
       "The GitHub CLI bridge refuses known mutating gh subcommands from tool execution.",
     ],
   },

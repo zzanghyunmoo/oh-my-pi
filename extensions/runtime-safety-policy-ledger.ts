@@ -88,7 +88,7 @@ export const runtimeSafetyPolicyLedger = [
       },
     ],
     redactionGuidance: [
-      "Do not log OAuth tokens, session cookies, or raw MCP auth headers.",
+      "Do not log OAuth tokens, LINEAR_API_KEY, session cookies, or raw MCP auth headers.",
       "Avoid echoing private issue content unless it is needed to answer the user's request.",
     ],
     auditGuidance: [
@@ -124,7 +124,7 @@ export const runtimeSafetyPolicyLedger = [
       },
     ],
     redactionGuidance: [
-      "Do not log OAuth tokens, session cookies, or raw MCP auth headers.",
+      "Do not log OAuth tokens, NOTION_API_KEY, NOTION_TOKEN, session cookies, or raw MCP auth headers.",
       "Avoid echoing private page/database content unless it is needed to answer the user's request.",
     ],
     auditGuidance: [
@@ -259,7 +259,7 @@ export const runtimeSafetyPolicyLedger = [
       },
     ],
     redactionGuidance: [
-      "Do not log OAuth tokens, raw transport credentials, or unrelated private workspace content.",
+      "Do not log OAuth tokens, access-key env values, raw transport credentials, or unrelated private workspace content.",
     ],
     auditGuidance: [
       "Record service, tool name, and high-level intent for write-like MCP calls.",

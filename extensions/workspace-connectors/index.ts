@@ -1,7 +1,8 @@
-import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { StreamableHTTPClientTransport, StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { spawn } from "node:child_process";
 import {
   WORKSPACE_MCP_SERVICE_IDS,
@@ -19,6 +20,20 @@ import {
   isBlockedGithubGhCliInvocation,
   summarizeRuntimeSafetyPolicy,
 } from "../runtime-safety-policy-ledger.js";
+import {
+  clearOAuthState,
+  ConnectorAuthRequiredError,
+  createOAuthProviderForTransport,
+  fetchWithSystemCa,
+  formatAuthRequiredMessage,
+  getConnectorAuthStatus,
+  hasStoredOAuthToken,
+  removeAuthFileIfEmpty,
+  resolveAccessKey,
+  runBrowserOAuthLogin,
+  type ConnectorAuthMode,
+  type ConnectorAuthStatus,
+} from "./auth.js";
 
 type ServiceName = WorkspaceMcpServiceName;
 type NotifyLevel = "info" | "error";
@@ -28,59 +43,6 @@ interface NotificationContext {
     notify(message: string, level: NotifyLevel): void | Promise<void>;
   };
 }
-
-interface TerminalHandoffTui {
-  stop(): void;
-  start(): void;
-  requestRender(force?: boolean): void;
-}
-
-interface TerminalHandoffComponent {
-  render(): string[];
-  invalidate(): void;
-  dispose?(): void;
-}
-
-interface TerminalHandoffContext extends NotificationContext {
-  readonly hasUI?: boolean;
-  readonly ui: NotificationContext["ui"] & {
-    custom?<T>(
-      factory: (
-        tui: TerminalHandoffTui,
-        theme: unknown,
-        keybindings: unknown,
-        done: (result: T) => void,
-      ) => TerminalHandoffComponent | Promise<TerminalHandoffComponent>,
-    ): Promise<T>;
-  };
-}
-
-type InteractiveLoginResultBase = {
-  readonly restoreError?: string;
-};
-
-export type InteractiveLoginResult = InteractiveLoginResultBase & (
-  | { readonly status: "unsupported" }
-  | { readonly status: "completed"; readonly code: number | null; readonly signal: NodeJS.Signals | null }
-  | { readonly status: "spawn-error"; readonly error: string }
-);
-
-interface InteractiveLoginChildProcess {
-  on(event: "error", listener: (error: Error) => void): this;
-  on(event: "exit", listener: (code: number | null, signal: NodeJS.Signals | null) => void): this;
-}
-
-type InteractiveLoginSpawnOptions = {
-  readonly stdio: "inherit";
-  readonly shell: boolean;
-  readonly env: NodeJS.ProcessEnv;
-};
-
-type InteractiveLoginSpawn = (
-  command: string,
-  args: string[],
-  options: InteractiveLoginSpawnOptions,
-) => InteractiveLoginChildProcess;
 
 interface WorkspaceMcpListToolsParams {
   readonly service: ServiceName;
@@ -98,71 +60,20 @@ interface GitHubGhCliParams {
   readonly args: string[];
 }
 
-const NODE_USE_SYSTEM_CA_OPTION = "--use-system-ca";
-const MCP_REMOTE_ENV_KEYS_TO_INHERIT = [
-  "NODE_EXTRA_CA_CERTS",
-  "NODE_TLS_REJECT_UNAUTHORIZED",
-  "HTTPS_PROXY",
-  "HTTP_PROXY",
-  "ALL_PROXY",
-  "NO_PROXY",
-  "https_proxy",
-  "http_proxy",
-  "all_proxy",
-  "no_proxy",
-] as const;
-
-function appendNodeOption(existingOptions: string | undefined, option: string): string {
-  if (!existingOptions || existingOptions.trim() === "") return option;
-  if (existingOptions.split(/\s+/).includes(option)) return existingOptions;
-  return `${existingOptions} ${option}`;
-}
-
-export function buildMcpRemoteEnvironment(baseEnv: NodeJS.ProcessEnv = process.env): Record<string, string> {
-  const env: Record<string, string> = {};
-
-  for (const key of MCP_REMOTE_ENV_KEYS_TO_INHERIT) {
-    const value = baseEnv[key];
-    if (value !== undefined && value !== "") {
-      env[key] = value;
-    }
-  }
-
-  if (baseEnv.NODE_OPTIONS !== undefined && baseEnv.NODE_OPTIONS !== "") {
-    env.NODE_OPTIONS = baseEnv.NODE_OPTIONS;
-  }
-
-  if (process.allowedNodeEnvironmentFlags.has(NODE_USE_SYSTEM_CA_OPTION)) {
-    env.NODE_OPTIONS = appendNodeOption(env.NODE_OPTIONS, NODE_USE_SYSTEM_CA_OPTION);
-  }
-
-  return env;
-}
-
-function buildInteractiveLoginEnvironment(): NodeJS.ProcessEnv {
-  return { ...process.env, ...buildMcpRemoteEnvironment() };
+interface McpClientResult<T> {
+  readonly value: T;
+  readonly authMode: ConnectorAuthMode;
 }
 
 function parseService(args: string): ServiceName | null {
   return parseWorkspaceMcpServiceArgument(args);
 }
 
-async function withMcpClient<T>(service: ServiceName, fn: (client: Client) => Promise<T>): Promise<T> {
-  const route = routeWorkspaceMcpConnector(service);
-  const client = new Client({ name: "pi-workspace-connectors", version: "0.1.0" });
-  const transport = new StdioClientTransport({
-    command: "npx",
-    args: [...route.mcpRemoteArgs],
-    env: buildMcpRemoteEnvironment(),
-    stderr: "pipe",
-  });
-
-  try {
-    await client.connect(transport);
-    return await fn(client);
-  } finally {
-    await client.close().catch(() => undefined);
-  }
+function parseOptionalService(args: string): ServiceName[] | null {
+  const trimmed = args.trim();
+  if (!trimmed) return [...WORKSPACE_MCP_SERVICE_IDS];
+  const service = parseService(trimmed);
+  return service ? [service] : null;
 }
 
 function stringifyMcpContent(result: any): string {
@@ -198,126 +109,120 @@ function formatError(error: unknown): string {
   return String(error);
 }
 
-function emptyHandoffComponent(): TerminalHandoffComponent {
-  return { render: () => [], invalidate: () => undefined };
+function isAuthLikeFailure(error: unknown): boolean {
+  if (error instanceof ConnectorAuthRequiredError || error instanceof UnauthorizedError) return true;
+  if (error instanceof StreamableHTTPError && (error.code === 401 || error.code === 403)) return true;
+  const message = error instanceof Error ? error.message : String(error);
+  return /\b(401|403|unauthorized|forbidden|authentication required)\b/i.test(message);
 }
 
-type UsableTerminalHandoffContext = TerminalHandoffContext & {
-  readonly hasUI: true;
-  readonly ui: NotificationContext["ui"] & {
-    custom<T>(
-      factory: (
-        tui: TerminalHandoffTui,
-        theme: unknown,
-        keybindings: unknown,
-        done: (result: T) => void,
-      ) => TerminalHandoffComponent | Promise<TerminalHandoffComponent>,
-    ): Promise<T>;
-  };
-};
-
-function canUseTerminalHandoff(ctx: TerminalHandoffContext): ctx is UsableTerminalHandoffContext {
-  return ctx.hasUI === true && typeof ctx.ui.custom === "function";
+function accessKeyRejectedMessage(service: ServiceName, envVar: string, error: unknown): string {
+  const route = routeWorkspaceMcpConnector(service);
+  return `${route.label} access-key fallback via ${envVar} was rejected by the MCP endpoint: ${formatError(error)}. ${route.authGuidance}`;
 }
 
-export function runInteractiveLogin(
-  command: string,
-  args: string[],
-  ctx: TerminalHandoffContext,
-  spawnImpl: InteractiveLoginSpawn = spawn as InteractiveLoginSpawn,
-): Promise<InteractiveLoginResult> {
-  if (!canUseTerminalHandoff(ctx)) {
-    return Promise.resolve({ status: "unsupported" });
+function parseMcpUrl(service: ServiceName): URL {
+  const route = routeWorkspaceMcpConnector(service);
+  try {
+    return new URL(route.mcpUrl);
+  } catch (error: unknown) {
+    throw new Error(`Invalid ${route.label} MCP URL: ${formatError(error)}`);
   }
+}
 
-  return ctx.ui.custom<InteractiveLoginResult>((tui, _theme, _keybindings, done) => {
-    let settled = false;
-    let tuiStopped = false;
+async function connectWithTransport<T>(
+  transport: StreamableHTTPClientTransport,
+  authMode: ConnectorAuthMode,
+  fn: (client: Client) => Promise<T>,
+): Promise<McpClientResult<T>> {
+  const client = new Client({ name: "pi-workspace-connectors", version: "0.2.0" });
+  try {
+    await client.connect(transport);
+    return { value: await fn(client), authMode };
+  } finally {
+    await client.close().catch(() => undefined);
+  }
+}
 
-    const finish = (result: InteractiveLoginResult) => {
-      if (settled) return;
-      settled = true;
+async function connectWithOAuth<T>(service: ServiceName, fn: (client: Client) => Promise<T>): Promise<McpClientResult<T>> {
+  return connectWithTransport(new StreamableHTTPClientTransport(parseMcpUrl(service), {
+    authProvider: createOAuthProviderForTransport(service),
+    fetch: fetchWithSystemCa,
+  }), "oauth", fn);
+}
 
-      let restoreError: string | undefined;
-      if (tuiStopped) {
-        try {
-          tui.start();
-          tui.requestRender(true);
-        } catch (error: unknown) {
-          restoreError = formatError(error);
-        }
-      }
+async function connectWithAccessKey<T>(service: ServiceName, accessKey: { envVar: string; value: string }, fn: (client: Client) => Promise<T>): Promise<McpClientResult<T>> {
+  return connectWithTransport(new StreamableHTTPClientTransport(parseMcpUrl(service), {
+    fetch: fetchWithSystemCa,
+    requestInit: {
+      headers: {
+        Authorization: `Bearer ${accessKey.value}`,
+      },
+    },
+  }), "access-key", fn);
+}
 
-      done(restoreError ? { ...result, restoreError } : result);
-    };
+async function withMcpClient<T>(service: ServiceName, fn: (client: Client) => Promise<T>): Promise<McpClientResult<T>> {
+  const oauthTokenPresent = await hasStoredOAuthToken(service);
+  const accessKey = resolveAccessKey(service);
+  let oauthError: unknown;
 
+  if (oauthTokenPresent) {
     try {
-      tui.stop();
-      tuiStopped = true;
-      const child = spawnImpl(command, args, {
-        stdio: "inherit",
-        shell: process.platform === "win32",
-        env: buildInteractiveLoginEnvironment(),
-      });
-      child.on("error", (error) => finish({ status: "spawn-error", error: formatError(error) }));
-      child.on("exit", (code, signal) => finish({ status: "completed", code, signal: signal ?? null }));
+      return await connectWithOAuth(service, fn);
     } catch (error: unknown) {
-      finish({ status: "spawn-error", error: formatError(error) });
+      oauthError = error;
+      if (!isAuthLikeFailure(error)) throw error;
+      if (!accessKey) throw new ConnectorAuthRequiredError(formatAuthRequiredMessage(service));
     }
-
-    return emptyHandoffComponent();
-  }).catch((error: unknown) => ({ status: "spawn-error", error: formatError(error) }));
-}
-
-function describeExitResult(result: Extract<InteractiveLoginResult, { status: "completed" }>): string {
-  if (result.signal) return `signal ${result.signal}`;
-  if (result.code !== null) return `code ${result.code}`;
-  return "no exit code";
-}
-
-type WorkspaceMcpRoute = ReturnType<typeof routeWorkspaceMcpConnector>;
-
-export function formatLoginFallbackMessage(route: WorkspaceMcpRoute): string {
-  return `${route.fallbackMessage} External shell fallback: ${route.loginShellCommand}. After it completes, restart Pi or run ${route.statusGuidance}`;
-}
-
-export function formatInteractiveLoginResultNotification(
-  route: WorkspaceMcpRoute,
-  result: InteractiveLoginResult,
-): { level: NotifyLevel; message: string } {
-  const restoreNote = result.restoreError ? ` TUI restore reported: ${result.restoreError}.` : "";
-
-  if (result.status === "unsupported") {
-    return {
-      level: "error",
-      message: `${route.label} OAuth login requires an interactive Pi TUI terminal handoff. ${formatLoginFallbackMessage(route)}`,
-    };
   }
 
-  if (result.status === "spawn-error") {
-    return {
-      level: "error",
-      message: `${route.label} login/check could not start: ${result.error}.${restoreNote} ${formatLoginFallbackMessage(route)}`,
-    };
+  if (accessKey) {
+    try {
+      return await connectWithAccessKey(service, accessKey, fn);
+    } catch (error: unknown) {
+      if (isAuthLikeFailure(error)) {
+        throw new ConnectorAuthRequiredError(accessKeyRejectedMessage(service, accessKey.envVar, error));
+      }
+      throw error;
+    }
   }
 
-  if (result.code === 0) {
-    return {
-      level: "info",
-      message: `${route.label} login/check completed.${restoreNote} ${route.statusGuidance}`,
-    };
-  }
+  if (oauthError) throw oauthError;
+  throw new ConnectorAuthRequiredError(formatAuthRequiredMessage(service));
+}
 
-  return {
-    level: "error",
-    message: `${route.label} login/check exited with ${describeExitResult(result)}.${restoreNote} ${formatLoginFallbackMessage(route)}`,
-  };
+function formatStatusLine(status: ConnectorAuthStatus): string {
+  const route = routeWorkspaceMcpConnector(status.service);
+  const oauth = status.oauthTokenPresent
+    ? `OAuth token stored${status.oauthRefreshTokenPresent ? "+refresh" : ""}`
+    : status.oauthConfigured
+      ? "OAuth client registered but no token"
+      : "OAuth not configured";
+  const access = status.accessKeyConfigured
+    ? `access key set (${status.accessKeyEnvVar})`
+    : `access key missing (${route.accessKeyEnvVars.join("/")})`;
+  const preferred = status.preferredMode ? `preferred=${status.preferredMode}` : "not authenticated";
+  return `- ${route.label}: ${preferred}; ${oauth}; ${access}`;
+}
+
+async function formatStatusReport(services: readonly ServiceName[]): Promise<string> {
+  const statuses = await Promise.all(services.map((service) => getConnectorAuthStatus(service)));
+  return [
+    "Workspace connector auth status",
+    "",
+    ...statuses.map(formatStatusLine),
+    "",
+    `Auth file: ${statuses[0]?.authPath ?? "not initialized"}`,
+  ].join("\n");
 }
 
 export default function (pi: ExtensionAPI) {
   if (process.env.ENABLE_WORKSPACE_CONNECTORS !== "true") return;
   const loginUsage = formatWorkspaceMcpUsage("/connector-login");
   const toolsUsage = formatWorkspaceMcpUsage("/connector-tools");
+  const statusUsage = `${formatWorkspaceMcpUsage("/connector-status")} (or /connector-status for all)`;
+  const logoutUsage = formatWorkspaceMcpUsage("/connector-logout");
   const githubRoute = routeGitHubCliConnector();
   const listToolsPolicy = getToolRuntimeSafetyPolicy("workspace_mcp_list_tools");
   const callToolPolicy = getToolRuntimeSafetyPolicy("workspace_mcp_call_tool");
@@ -325,30 +230,52 @@ export default function (pi: ExtensionAPI) {
 
   pi.on("session_start", async (_event: unknown, ctx: NotificationContext) => {
     ctx.ui.notify(
-      `Workspace connectors loaded. Use ${loginUsage}, then tools workspace_mcp_list_tools / workspace_mcp_call_tool. GitHub is available through ${githubRoute.command} when authenticated.`,
+      `Workspace connectors loaded. Browser OAuth: ${loginUsage}; status: /connector-status; tools: workspace_mcp_list_tools / workspace_mcp_call_tool. GitHub is available through ${githubRoute.command} when authenticated.`,
       "info",
     );
   });
 
   pi.registerCommand("connector-login", {
-    description: `Login to an OAuth MCP workspace connector: ${loginUsage}`,
-    handler: async (args: string, ctx: ExtensionCommandContext) => {
+    description: `Browser OAuth login for a workspace connector, with access-key fallback guidance: ${loginUsage}`,
+    handler: async (args: string, ctx: NotificationContext) => {
       const service = parseService(args);
       if (!service) {
         ctx.ui.notify(`Usage: ${loginUsage}`, "error");
         return;
       }
 
-      const route = routeWorkspaceMcpConnector(service);
-      if (canUseTerminalHandoff(ctx)) {
-        ctx.ui.notify(
-          `Starting ${route.label} OAuth flow. Pi will temporarily hand the terminal to the OAuth CLI. ${route.authGuidance}`,
-          "info",
-        );
+      try {
+        await runBrowserOAuthLogin(service, ctx);
+      } catch (error: unknown) {
+        ctx.ui.notify(formatError(error), "error");
       }
-      const result = await runInteractiveLogin("npx", [...route.loginArgs], ctx);
-      const notification = formatInteractiveLoginResultNotification(route, result);
-      ctx.ui.notify(notification.message, notification.level);
+    },
+  });
+
+  pi.registerCommand("connector-status", {
+    description: `Show workspace connector authentication status: ${statusUsage}`,
+    handler: async (args: string, ctx: NotificationContext) => {
+      const services = parseOptionalService(args);
+      if (!services) {
+        ctx.ui.notify(`Usage: ${statusUsage}`, "error");
+        return;
+      }
+      ctx.ui.notify(await formatStatusReport(services), "info");
+    },
+  });
+
+  pi.registerCommand("connector-logout", {
+    description: `Clear locally stored OAuth credentials for a connector: ${logoutUsage}`,
+    handler: async (args: string, ctx: NotificationContext) => {
+      const service = parseService(args);
+      if (!service) {
+        ctx.ui.notify(`Usage: ${logoutUsage}`, "error");
+        return;
+      }
+
+      await clearOAuthState(service);
+      await removeAuthFileIfEmpty();
+      ctx.ui.notify(`${routeWorkspaceMcpConnector(service).label} OAuth credentials cleared. Access-key env vars, if set, are unchanged.`, "info");
     },
   });
 
@@ -363,11 +290,11 @@ export default function (pi: ExtensionAPI) {
 
       const route = routeWorkspaceMcpConnector(service);
       try {
-        const tools = await withMcpClient(service, async (client) => (await client.listTools()).tools ?? []);
+        const { value: tools, authMode } = await withMcpClient(service, async (client) => (await client.listTools()).tools ?? []);
         const names = tools.map((tool: any) => `- ${tool.name}: ${tool.description ?? ""}`).join("\n");
-        ctx.ui.notify(`${route.label} tools:\n${names || "No tools returned."}`, "info");
-      } catch (error: any) {
-        ctx.ui.notify(`Failed to list ${route.label} tools: ${error?.message ?? String(error)}\n${route.fallbackMessage}`, "error");
+        ctx.ui.notify(`${route.label} tools (${authMode}):\n${names || "No tools returned."}`, "info");
+      } catch (error: unknown) {
+        ctx.ui.notify(`Failed to list ${route.label} tools: ${formatError(error)}`, "error");
       }
     },
   });
@@ -375,8 +302,8 @@ export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: "workspace_mcp_list_tools",
     label: "Workspace MCP: List Tools",
-    description: "List available tools from the Linear or Notion OAuth MCP connector.",
-    promptSnippet: "workspace_mcp_list_tools: list Linear/Notion MCP connector tools after OAuth login.",
+    description: "List available tools from the Linear or Notion connector. Uses stored browser OAuth first, then configured access-key fallback.",
+    promptSnippet: "workspace_mcp_list_tools: list Linear/Notion connector tools after /connector-login or access-key env setup.",
     promptGuidelines: [
       "Use workspace_mcp_list_tools before calling an unfamiliar Linear or Notion MCP tool.",
       `If a Linear or Notion connector reports authentication errors, use the catalog guidance: ${WORKSPACE_MCP_SERVICE_IDS.map((service) => routeWorkspaceMcpConnector(service).authGuidance).join(" ")}`,
@@ -391,7 +318,7 @@ export default function (pi: ExtensionAPI) {
       const service = params.service;
       const route = routeWorkspaceMcpConnector(service);
       try {
-        const tools = await withMcpClient(service, async (client) => (await client.listTools()).tools ?? []);
+        const { value: tools, authMode } = await withMcpClient(service, async (client) => (await client.listTools()).tools ?? []);
         return {
           content: [
             {
@@ -402,13 +329,14 @@ export default function (pi: ExtensionAPI) {
           details: {
             service,
             backend: route.description,
+            authMode,
             safetyPolicy: summarizeRuntimeSafetyPolicy(listToolsPolicy),
             connectorSafetyPolicy: summarizeRuntimeSafetyPolicy(getConnectorRuntimeSafetyPolicy(service)),
             tools,
           },
         };
-      } catch (error: any) {
-        throw new Error(`Failed to list ${route.label} tools: ${error?.message ?? String(error)} ${route.fallbackMessage}`);
+      } catch (error: unknown) {
+        throw new Error(`Failed to list ${route.label} tools: ${formatError(error)}`);
       }
     },
   });
@@ -416,7 +344,7 @@ export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: "workspace_mcp_call_tool",
     label: "Workspace MCP: Call Tool",
-    description: "Call a tool on the Linear or Notion OAuth MCP connector.",
+    description: "Call a tool on the Linear or Notion connector. Uses stored browser OAuth first, then configured access-key fallback.",
     promptSnippet: "workspace_mcp_call_tool: call a Linear/Notion MCP tool by name with JSON arguments.",
     promptGuidelines: [
       "Use workspace_mcp_call_tool only after identifying the exact tool name and argument schema from workspace_mcp_list_tools or user-provided context.",
@@ -438,7 +366,7 @@ export default function (pi: ExtensionAPI) {
           ? params.arguments as McpToolArguments
           : {};
       try {
-        const result = await withMcpClient(service, async (client) =>
+        const { value: result, authMode } = await withMcpClient(service, async (client) =>
           client.callTool({ name: params.toolName, arguments: toolArguments }),
         );
 
@@ -447,14 +375,15 @@ export default function (pi: ExtensionAPI) {
           details: {
             service,
             backend: route.description,
+            authMode,
             toolName: params.toolName,
             safetyPolicy: summarizeRuntimeSafetyPolicy(callToolPolicy),
             connectorSafetyPolicy: summarizeRuntimeSafetyPolicy(getConnectorRuntimeSafetyPolicy(service)),
             result,
           },
         };
-      } catch (error: any) {
-        throw new Error(`Failed to call ${route.label} MCP tool ${params.toolName}: ${error?.message ?? String(error)} ${route.fallbackMessage}`);
+      } catch (error: unknown) {
+        throw new Error(`Failed to call ${route.label} MCP tool ${params.toolName}: ${formatError(error)}`);
       }
     },
   });

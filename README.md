@@ -46,6 +46,11 @@ Use its output as a safe checklist for `default`, `workspace`, `proxy-provider`,
 ENABLE_QUOTIO=true
 ENABLE_WORKSPACE_CONNECTORS=true
 
+# Workspace connector access-key fallback (브라우저 OAuth가 불가할 때만 사용, 커밋하지 않음)
+LINEAR_API_KEY=<local-linear-api-key>
+NOTION_API_KEY=<local-notion-integration-token>
+# 또는 NOTION_TOKEN=<local-notion-integration-token>
+
 # Quotio Provider 설정 (로컬 값은 커밋하지 않음)
 QUOTIO_BASE_URL=<local-quotio-openai-compatible-base-url>
 QUOTIO_API_KEY=<local-quotio-api-key>
@@ -60,25 +65,24 @@ QUOTIO_API_KEY=<local-quotio-api-key>
 - `/oh-my-pi` — Show the oh-my-pi command palette and setup help
 - `/oh-my-pi-doctor` — Check local env, capability registry, connector/provider metadata, safety policies, gh auth, and local-only paths
 - `/quotio-status` — Check proxy connectivity and authentication
-- `/connector-login linear|notion` — OAuth login for workspace connectors
-- `/connector-tools linear|notion` — List connector tools after login
+- `/connector-login linear|notion` — Direct browser OAuth login for workspace connectors
+- `/connector-status [linear|notion]` — Show connector OAuth/access-key status
+- `/connector-logout linear|notion` — Clear locally stored OAuth credentials
+- `/connector-tools linear|notion` — List connector tools after OAuth login or access-key env setup
 
-`/connector-login` temporarily pauses the Pi TUI and gives the OAuth CLI direct
-terminal access. If Pi is running without a TUI, the prompt is cancelled, or the
-terminal needs recovery, run the matching fallback command in a normal shell:
+`/connector-login` opens the browser directly and receives the OAuth callback on
+`127.0.0.1`. It no longer pauses the Pi TUI or runs `mcp-remote-client` inside
+the terminal. OAuth tokens are stored outside the repo at
+`~/.pi/agent/workspace-connectors-auth.json` by default. Override that local-only
+path with `OH_MY_PI_CONNECTOR_AUTH_PATH` when needed.
 
-```bash
-npx -y -p mcp-remote@latest mcp-remote-client https://mcp.linear.app/mcp
-npx -y -p mcp-remote@latest mcp-remote-client https://mcp.notion.com/mcp
-```
-
-After the fallback finishes, restart/reload Pi and run `/connector-tools
-linear|notion` to confirm tools are available. If terminal input remains odd,
-run `reset` or `stty sane` before restarting Pi.
+If browser OAuth is unavailable, set `LINEAR_API_KEY` or
+`NOTION_API_KEY`/`NOTION_TOKEN` in the CWD `.env`. Connector tools prefer stored
+OAuth tokens and then fall back to the configured access key.
 
 ## Do not commit
 
 - Pi auth files: `~/.pi/agent/auth.json`
-- OAuth state: `.mcp-auth`
+- OAuth state: `.mcp-auth`, `~/.pi/agent/workspace-connectors-auth.json`
 - Sessions: `~/.pi/agent/sessions`
 - API keys / tokens / `.env`

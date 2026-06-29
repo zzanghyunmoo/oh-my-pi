@@ -1,5 +1,6 @@
 export type ConnectorBackendKind = "oauth-mcp" | "cli" | "provider";
-export type ConnectorAdapterKind = "mcp-remote-oauth" | "gh-cli" | "pi-provider";
+export type ConnectorAdapterKind = "direct-http-oauth" | "gh-cli" | "pi-provider";
+export type WorkspaceConnectorAuthStrategyKind = "browser-oauth" | "access-key";
 
 interface ConnectorBackendBase {
   readonly id: string;
@@ -17,14 +18,22 @@ interface ConnectorBackendBase {
   };
 }
 
+interface WorkspaceConnectorAuthStrategy {
+  readonly kind: WorkspaceConnectorAuthStrategyKind;
+  readonly envVars?: readonly string[];
+  readonly description: string;
+}
+
 interface OAuthMcpConnectorBackend extends ConnectorBackendBase {
   readonly backendKind: "oauth-mcp";
-  readonly adapterKind: "mcp-remote-oauth";
+  readonly adapterKind: "direct-http-oauth";
+  readonly authStrategies: readonly WorkspaceConnectorAuthStrategy[];
   readonly mcp: {
     readonly url: string;
-    readonly remotePackage: string;
-    readonly clientCommand: string;
-    readonly transportStrategy: "http-first";
+    readonly transportStrategy: "streamable-http";
+  };
+  readonly oauth: {
+    readonly callbackPort: number;
   };
 }
 
@@ -57,40 +66,64 @@ export const connectorBackendCatalog = [
     id: "linear",
     label: "Linear",
     backendKind: "oauth-mcp",
-    adapterKind: "mcp-remote-oauth",
-    description: "Linear workspace access through the hosted OAuth MCP endpoint.",
-    authGuidance: "Run /connector-login linear, then follow the browser/terminal OAuth prompts.",
+    adapterKind: "direct-http-oauth",
+    description: "Linear workspace access through the hosted OAuth MCP endpoint, with access-key fallback when configured.",
+    authGuidance: "Run /connector-login linear for browser OAuth, or set LINEAR_API_KEY for access-key fallback.",
     statusGuidance: "Run /connector-tools linear to confirm authenticated MCP tools are available.",
-    fallbackMessage: "If Linear MCP reports an authentication or transport error, rerun /connector-login linear and retry.",
+    fallbackMessage: "If Linear MCP reports an authentication or transport error, rerun /connector-login linear or set LINEAR_API_KEY and retry.",
     exposes: {
-      commands: ["connector-login", "connector-tools"],
+      commands: ["connector-login", "connector-status", "connector-logout", "connector-tools"],
       tools: ["workspace_mcp_list_tools", "workspace_mcp_call_tool"],
     },
+    authStrategies: [
+      {
+        kind: "browser-oauth",
+        description: "Preferred: direct browser OAuth with local loopback callback and locally stored OAuth tokens.",
+      },
+      {
+        kind: "access-key",
+        envVars: ["LINEAR_API_KEY"],
+        description: "Fallback: send the configured Linear API key as a bearer token to the MCP endpoint when OAuth tokens are unavailable.",
+      },
+    ],
     mcp: {
       url: "https://mcp.linear.app/mcp",
-      remotePackage: "mcp-remote@latest",
-      clientCommand: "mcp-remote-client",
-      transportStrategy: "http-first",
+      transportStrategy: "streamable-http",
+    },
+    oauth: {
+      callbackPort: 3334,
     },
   },
   {
     id: "notion",
     label: "Notion",
     backendKind: "oauth-mcp",
-    adapterKind: "mcp-remote-oauth",
-    description: "Notion workspace access through the hosted OAuth MCP endpoint.",
-    authGuidance: "Run /connector-login notion, then follow the browser/terminal OAuth prompts.",
+    adapterKind: "direct-http-oauth",
+    description: "Notion workspace access through the hosted OAuth MCP endpoint, with access-key fallback when configured.",
+    authGuidance: "Run /connector-login notion for browser OAuth, or set NOTION_API_KEY/NOTION_TOKEN for access-key fallback.",
     statusGuidance: "Run /connector-tools notion to confirm authenticated MCP tools are available.",
-    fallbackMessage: "If Notion MCP reports an authentication or transport error, rerun /connector-login notion and retry.",
+    fallbackMessage: "If Notion MCP reports an authentication or transport error, rerun /connector-login notion or set NOTION_API_KEY/NOTION_TOKEN and retry.",
     exposes: {
-      commands: ["connector-login", "connector-tools"],
+      commands: ["connector-login", "connector-status", "connector-logout", "connector-tools"],
       tools: ["workspace_mcp_list_tools", "workspace_mcp_call_tool"],
     },
+    authStrategies: [
+      {
+        kind: "browser-oauth",
+        description: "Preferred: direct browser OAuth with local loopback callback and locally stored OAuth tokens.",
+      },
+      {
+        kind: "access-key",
+        envVars: ["NOTION_API_KEY", "NOTION_TOKEN"],
+        description: "Fallback: send the configured Notion integration token as a bearer token to the MCP endpoint when OAuth tokens are unavailable.",
+      },
+    ],
     mcp: {
       url: "https://mcp.notion.com/mcp",
-      remotePackage: "mcp-remote@latest",
-      clientCommand: "mcp-remote-client",
-      transportStrategy: "http-first",
+      transportStrategy: "streamable-http",
+    },
+    oauth: {
+      callbackPort: 3335,
     },
   },
   {
@@ -178,7 +211,7 @@ const SHELL_SAFE_TOKEN = /^[A-Za-z0-9_/:@%+=.,-]+$/;
 function shellQuote(value: string): string {
   if (value === "") return "''";
   if (SHELL_SAFE_TOKEN.test(value)) return value;
-  return `'${value.replaceAll("'", "'\\''")}'`;
+  return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
 function formatShellCommand(command: string, args: readonly string[]): string {
@@ -191,8 +224,9 @@ export function routeWorkspaceMcpConnector(service: WorkspaceMcpServiceName) {
     throw new Error(`${backend.label} is not an OAuth MCP connector.`);
   }
 
-  const mcpRemoteArgs = ["-y", backend.mcp.remotePackage, backend.mcp.url, "--transport", backend.mcp.transportStrategy] as const;
-  const loginArgs = ["-y", "-p", backend.mcp.remotePackage, backend.mcp.clientCommand, backend.mcp.url] as const;
+  const accessKeyEnvVars = backend.authStrategies
+    .flatMap((strategy) => strategy.kind === "access-key" ? strategy.envVars ?? [] : []);
+  const legacyMcpRemoteLoginArgs = ["-y", "-p", "mcp-remote@latest", "mcp-remote-client", backend.mcp.url] as const;
 
   return {
     service: backend.id,
@@ -202,9 +236,11 @@ export function routeWorkspaceMcpConnector(service: WorkspaceMcpServiceName) {
     statusGuidance: backend.statusGuidance,
     fallbackMessage: backend.fallbackMessage,
     mcpUrl: backend.mcp.url,
-    mcpRemoteArgs,
-    loginArgs,
-    loginShellCommand: formatShellCommand("npx", loginArgs),
+    transportStrategy: backend.mcp.transportStrategy,
+    authStrategies: backend.authStrategies,
+    accessKeyEnvVars,
+    oauth: backend.oauth,
+    legacyMcpRemoteLoginShellCommand: formatShellCommand("npx", legacyMcpRemoteLoginArgs),
   };
 }
 
