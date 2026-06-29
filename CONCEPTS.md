@@ -28,3 +28,28 @@ Access-key Fallback is not the preferred setup path. It exists so connector tool
 The project-level safety vocabulary for deciding how registered tools and connector actions are described to agents, especially whether an operation is read-only or requires confirmation before writes.
 
 The ledger does not authenticate services. It describes behavioral boundaries for agent use after a connector is reachable.
+
+### Connector Setup Control Plane
+A human-facing setup surface for choosing connector setup mode, seeing desired readiness, and receiving login/status/logout next actions before agent tools run.
+
+The control plane owns setup guidance and readiness explanation. Runtime connector tools remain non-interactive: they reuse existing credentials or fail with a setup path rather than starting login.
+
+### Capability Slot
+A connector role such as issue tracker, wiki, git, or provider that can be filled by different services depending on tenant or setup mode.
+
+Capability slots let company and personal stacks use the same product vocabulary while resolving to different backends, for example Jira vs Linear for issue tracking or Confluence vs Notion for wiki.
+
+### Auth Passport
+A secret-free view of a connector's auth provenance, local-state ownership, and logout blast radius.
+
+An auth passport may report sources like Pi-managed OAuth state, CWD env fallback, `gh` CLI, `glab` CLI, or setup-only guidance, but it must not print tokens, API keys, auth headers, or copied `.env` content.
+
+### Readiness-Gated Tool Affordance
+A connector tool exposure rule where the selected setup mode and auth readiness decide whether a tool is visible, hidden, gated, or replaced by setup guidance.
+
+This keeps minimal setup from advertising excluded issue-tracker, wiki, or git tools, and keeps unauthenticated runtime calls from initiating interactive auth.
+
+### Connector Setup State
+A secret-free local record of the user's selected connector setup mode and selector choices.
+
+Connector Setup State may store mode, tenant, capability, service, schema version, and update time. It must not store OAuth tokens, API keys, CLI tokens, auth headers, or copied `.env` values, and it remains separate from Workspace Connector Auth state.

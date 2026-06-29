@@ -151,6 +151,26 @@ function validateProfile(profile, context, seenIds) {
     }
   }
 
+  const connectorIds = new Set();
+  const validTenants = new Set(["personal", "company"]);
+  const validCapabilities = new Set(["issue-tracker", "wiki", "git"]);
+  const validSetupModes = new Set(["full", "selective", "minimal"]);
+  const validExposureStates = new Set(["runtime-tool", "runtime-gated", "setup-only"]);
+  const validAuthOwnership = new Set(["pi-oauth", "env-fallback", "external-cli", "setup-only"]);
+  for (const connector of profile.connectors ?? []) {
+    assert(connector.id && connector.backendRef && typeof connector.enabledByDefault === "boolean" && connector.auth, `${profile.id}: invalid connector entry`);
+    assert(!connectorIds.has(connector.id), `${profile.id}: duplicate connector id ${connector.id}`);
+    connectorIds.add(connector.id);
+    if (connector.tenant) assert(validTenants.has(connector.tenant), `${profile.id}: connector ${connector.id} has invalid tenant ${connector.tenant}`);
+    if (connector.capabilitySlot) assert(validCapabilities.has(connector.capabilitySlot), `${profile.id}: connector ${connector.id} has invalid capabilitySlot ${connector.capabilitySlot}`);
+    if (connector.setupModes) {
+      assert(connector.setupModes.length > 0, `${profile.id}: connector ${connector.id} setupModes must not be empty`);
+      for (const mode of connector.setupModes) assert(validSetupModes.has(mode), `${profile.id}: connector ${connector.id} has invalid setup mode ${mode}`);
+    }
+    if (connector.exposureState) assert(validExposureStates.has(connector.exposureState), `${profile.id}: connector ${connector.id} has invalid exposureState ${connector.exposureState}`);
+    for (const owner of connector.authOwnership ?? []) assert(validAuthOwnership.has(owner), `${profile.id}: connector ${connector.id} has invalid authOwnership ${owner}`);
+  }
+
   for (const metadataPath of Object.values(profile.metadataRefs ?? {})) {
     assert(existsSync(join(REPO_ROOT, metadataPath)), `${profile.id}: metadataRef ${metadataPath} does not exist`);
   }
@@ -249,6 +269,12 @@ function commandApply(args) {
   const secretPlaceholders = (profile.secretRefs ?? [])
     .filter((entry) => entry.commitPolicy === "never-commit-value")
     .map((entry) => `${entry.name}=<local-${entry.kind}>`);
+  const connectorSetupLines = (profile.connectors ?? [])
+    .map((connector) => {
+      const tags = [connector.tenant, connector.capabilitySlot, connector.exposureState].filter(Boolean).join("/");
+      const modes = (connector.setupModes ?? []).join("|") || "profile-only";
+      return `${connector.id}${tags ? ` (${tags})` : ""}: modes=${modes}; auth=${connector.auth}; status=${connector.statusCommand ?? "n/a"}`;
+    });
   const connectorLogins = (profile.connectors ?? [])
     .map((connector) => connector.loginCommand)
     .filter(Boolean);
@@ -267,6 +293,11 @@ function commandApply(args) {
   const localEnvLines = [...envLines, ...secretPlaceholders];
   if (localEnvLines.length === 0) console.log("  (none)");
   for (const line of localEnvLines) console.log(`  ${line}`);
+  console.log("");
+  console.log("Connector setup intent:");
+  if (connectorSetupLines.length === 0) console.log("  (none)");
+  for (const line of connectorSetupLines) console.log(`  ${line}`);
+  if (connectorSetupLines.length > 0) console.log("  /connector-setup full  # or selective/minimal, depending on this machine's desired connector surface");
   console.log("");
   console.log("Connector/provider follow-up:");
   const followUps = [...connectorLogins, ...providerChecks];

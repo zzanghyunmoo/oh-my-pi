@@ -9,7 +9,7 @@
     "profile:verify": "node scripts/profile-pack.mjs verify",
     "profile:lock": "node scripts/profile-pack.mjs lock --write",
     "profile:apply": "node scripts/profile-pack.mjs apply",
-    "test:workspace-connectors": "rm -rf .tmp/workspace-connectors-test && tsc --outDir .tmp/workspace-connectors-test --rootDir . --module NodeNext --moduleResolution NodeNext --target ES2022 --types node --skipLibCheck extensions/workspace-connectors/index.ts extensions/workspace-connectors/interactive-login.test.ts extensions/setup-doctor/index.ts && node --test .tmp/workspace-connectors-test/extensions/workspace-connectors/interactive-login.test.js"
+    "test:workspace-connectors": "rm -rf .tmp/workspace-connectors-test && tsc --outDir .tmp/workspace-connectors-test --rootDir . --module NodeNext --moduleResolution NodeNext --target ES2022 --types node --skipLibCheck extensions/workspace-connectors/index.ts extensions/workspace-connectors/*.test.ts extensions/setup-doctor/index.ts extensions/setup-doctor/*.test.ts && node --test .tmp/workspace-connectors-test/extensions/workspace-connectors/*.test.js .tmp/workspace-connectors-test/extensions/setup-doctor/*.test.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

@@ -37,7 +37,7 @@
     {
       "id": "full",
       "source": "docs/profiles/full.profile.json",
-      "sha256": "357fdf21b62ab32df0ef99559096b1618613464aeb42ea281b5c9ba070918381",
+      "sha256": "50ecf98d670a2628c46d09db684cbe50bec53259b75ea856bb8142c9e3829d10",
       "packages": [
         "git:github.com/zzanghyunmoo/oh-my-pi",
         "npm:pi-web-access",
@@ -63,7 +63,10 @@
       "connectors": [
         "linear",
         "notion",
-        "github"
+        "github",
+        "gitlab",
+        "jira",
+        "confluence"
       ],
       "providers": [
         "quotio"
@@ -111,7 +114,7 @@
     {
       "id": "workspace",
       "source": "docs/profiles/workspace.profile.json",
-      "sha256": "be3b7a6e2d6282b90ad34efa0223a75a909b7187e6e40075df50399a5ed55048",
+      "sha256": "7c7d9eed36d10b2c27de3b8a4b3247faeb2b064504acab7971f5bf07b390dcd0",
       "packages": [
         "git:github.com/zzanghyunmoo/oh-my-pi",
         "npm:pi-web-access",
@@ -133,7 +136,10 @@
       "connectors": [
         "linear",
         "notion",
-        "github"
+        "github",
+        "gitlab",
+        "jira",
+        "confluence"
       ],
       "providers": [],
       "prompts": [
