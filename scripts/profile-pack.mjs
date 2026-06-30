@@ -52,12 +52,12 @@ function sha256(value) {
   return createHash("sha256").update(canonicalString(value)).digest("hex");
 }
 
-function unique(values) {
-  return [...new Set(values)];
-}
-
 function assert(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+function out(message = "") {
+  process.stdout.write(`${message}\n`);
 }
 
 function loadProfileFiles() {
@@ -104,6 +104,7 @@ function validateProfile(profile, context, seenIds) {
   ensureNoSecretValueFields(profile, profile.id);
 
   const packageExtensions = new Set(packageJson.pi?.extensions ?? []);
+  const packageSkills = new Set(packageJson.pi?.skills ?? []);
   const packagePrompts = new Set(packageJson.pi?.prompts ?? []);
   const packageThemes = new Set(packageJson.pi?.themes ?? []);
 
@@ -121,6 +122,9 @@ function validateProfile(profile, context, seenIds) {
 
   for (const extensionPath of profile.piPackage?.extensions ?? []) {
     assert(packageExtensions.has(extensionPath), `${profile.id}: piPackage extension ${extensionPath} is not in package.json pi.extensions`);
+  }
+  for (const skillPath of profile.piPackage?.skills ?? []) {
+    assert(packageSkills.has(skillPath), `${profile.id}: piPackage skill ${skillPath} is not in package.json pi.skills`);
   }
   for (const promptPath of profile.piPackage?.prompts ?? []) {
     assert(packagePrompts.has(promptPath), `${profile.id}: piPackage prompt ${promptPath} is not in package.json pi.prompts`);
@@ -194,6 +198,7 @@ function makeLock(profiles, profileFiles) {
       secretRefNames: (profile.secretRefs ?? []).map((entry) => entry.name),
       connectors: (profile.connectors ?? []).map((entry) => entry.id),
       providers: (profile.providers ?? []).map((entry) => entry.id),
+      skills: profile.piPackage.skills,
       prompts: profile.piPackage.prompts,
       themes: profile.piPackage.themes,
     })),
@@ -237,7 +242,7 @@ function commandVerify() {
   const { profiles, profileFiles } = loadAndValidateProfiles();
   const expectedLock = makeLock(profiles, profileFiles);
   verifyLock(expectedLock);
-  console.log(`profile:verify ok — ${profiles.length} profiles and ${repoPath(LOCK_PATH)} are deterministic and secret-free.`);
+  out(`profile:verify ok — ${profiles.length} profiles and ${repoPath(LOCK_PATH)} are deterministic and secret-free.`);
 }
 
 function commandLock(args) {
@@ -247,7 +252,7 @@ function commandLock(args) {
   const output = prettyJson(lock);
   if (write) {
     writeFileSync(LOCK_PATH, output, "utf8");
-    console.log(`Wrote ${repoPath(LOCK_PATH)} for ${profiles.length} profiles.`);
+    out(`Wrote ${repoPath(LOCK_PATH)} for ${profiles.length} profiles.`);
     return;
   }
   process.stdout.write(output);
@@ -282,31 +287,31 @@ function commandApply(args) {
     .map((provider) => provider.statusCommand)
     .filter(Boolean);
 
-  console.log(`oh-my-pi profile apply plan (dry-run): ${profile.id}`);
-  console.log("");
-  console.log("This command is intentionally non-destructive: it does not run pi install, write .env, or start OAuth.");
-  console.log("");
-  console.log("Install intent:");
-  for (const command of packageCommands) console.log(`  ${command}`);
-  console.log("");
-  console.log("Local CWD .env entries to create manually when needed:");
+  out(`oh-my-pi profile apply plan (dry-run): ${profile.id}`);
+  out();
+  out("This command is intentionally non-destructive: it does not run pi install, write .env, or start OAuth.");
+  out();
+  out("Install intent:");
+  for (const command of packageCommands) out(`  ${command}`);
+  out();
+  out("Local CWD .env entries to create manually when needed:");
   const localEnvLines = [...envLines, ...secretPlaceholders];
-  if (localEnvLines.length === 0) console.log("  (none)");
-  for (const line of localEnvLines) console.log(`  ${line}`);
-  console.log("");
-  console.log("Connector setup intent:");
-  if (connectorSetupLines.length === 0) console.log("  (none)");
-  for (const line of connectorSetupLines) console.log(`  ${line}`);
-  if (connectorSetupLines.length > 0) console.log("  /connector-setup full  # or selective/minimal, depending on this machine's desired connector surface");
-  console.log("");
-  console.log("Connector/provider follow-up:");
+  if (localEnvLines.length === 0) out("  (none)");
+  for (const line of localEnvLines) out(`  ${line}`);
+  out();
+  out("Connector setup intent:");
+  if (connectorSetupLines.length === 0) out("  (none)");
+  for (const line of connectorSetupLines) out(`  ${line}`);
+  if (connectorSetupLines.length > 0) out("  /connector-setup full  # or selective/minimal, depending on this machine's desired connector surface");
+  out();
+  out("Connector/provider follow-up:");
   const followUps = [...connectorLogins, ...providerChecks];
-  if (followUps.length === 0) console.log("  (none)");
-  for (const followUp of followUps) console.log(`  ${followUp}`);
+  if (followUps.length === 0) out("  (none)");
+  for (const followUp of followUps) out(`  ${followUp}`);
 }
 
 function printHelp() {
-  console.log(`Usage: node scripts/profile-pack.mjs <command> [options]\n\nCommands:\n  verify                 Validate profile JSON and deterministic lock receipt.\n  lock [--write]         Print or write docs/profiles/oh-my-pi.profile-lock.json.\n  apply [--profile id]   Print a non-destructive apply plan (default profile: default).`);
+  out(`Usage: node scripts/profile-pack.mjs <command> [options]\n\nCommands:\n  verify                 Validate profile JSON and deterministic lock receipt.\n  lock [--write]         Print or write docs/profiles/oh-my-pi.profile-lock.json.\n  apply [--profile id]   Print a non-destructive apply plan (default profile: default).`);
 }
 
 try {

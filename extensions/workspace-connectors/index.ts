@@ -132,7 +132,7 @@ function sanitizeMcpTool(tool: any): { name: string; description: string; inputS
   return summary;
 }
 
-function formatMcpToolList(tools: readonly any[]): string {
+export function formatMcpToolList(tools: readonly any[]): string {
   return redactConnectorOutput(tools.map((tool) => {
     const sanitized = sanitizeMcpTool(tool);
     return `${sanitized.name}: ${sanitized.description}`;
@@ -200,7 +200,7 @@ async function connectWithAccessKey<T>(service: WorkspaceMcpServiceName, accessK
   }), "access-key", fn);
 }
 
-async function withMcpClient<T>(service: WorkspaceMcpServiceName, fn: (client: Client) => Promise<T>): Promise<McpClientResult<T>> {
+export async function withMcpClient<T>(service: WorkspaceMcpServiceName, fn: (client: Client) => Promise<T>): Promise<McpClientResult<T>> {
   const oauthTokenPresent = await hasStoredOAuthToken(service);
   const accessKey = resolveAccessKey(service);
   let oauthError: unknown;

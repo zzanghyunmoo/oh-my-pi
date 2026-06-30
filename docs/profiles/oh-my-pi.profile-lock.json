@@ -12,7 +12,7 @@
     {
       "id": "default",
       "source": "docs/profiles/default.profile.json",
-      "sha256": "d5514623f42ff05018a04d08d07f031d4ed13f3df3656455449faecb0543adc6",
+      "sha256": "2fa0e8dd2f9e4d05b5faa40eed846f9d22ccd8f776a726bc1c65d7b0ea2d9796",
       "packages": [
         "git:github.com/zzanghyunmoo/oh-my-pi",
         "npm:pi-clear"
@@ -27,6 +27,9 @@
       "secretRefNames": [],
       "connectors": [],
       "providers": [],
+      "skills": [
+        "./skills"
+      ],
       "prompts": [
         "./prompts"
       ],
@@ -37,7 +40,7 @@
     {
       "id": "full",
       "source": "docs/profiles/full.profile.json",
-      "sha256": "50ecf98d670a2628c46d09db684cbe50bec53259b75ea856bb8142c9e3829d10",
+      "sha256": "bc3afcf94073059ef28d3bd8b752c7bb5de89553cc1bdc7b0abb35c258e7f0ab",
       "packages": [
         "git:github.com/zzanghyunmoo/oh-my-pi",
         "npm:pi-web-access",
@@ -71,6 +74,9 @@
       "providers": [
         "quotio"
       ],
+      "skills": [
+        "./skills"
+      ],
       "prompts": [
         "./prompts"
       ],
@@ -81,7 +87,7 @@
     {
       "id": "proxy-provider",
       "source": "docs/profiles/proxy-provider.profile.json",
-      "sha256": "50ac0989a49fc0a9b58484917326eb335f0bbb53713e58886908a6ac435a3ed6",
+      "sha256": "50a4f32cc9d0bb062edbea4aecc2cad4d3df51f362dc4cc1e03b00a9a1d79806",
       "packages": [
         "git:github.com/zzanghyunmoo/oh-my-pi",
         "npm:pi-clear"
@@ -104,6 +110,9 @@
       "providers": [
         "quotio"
       ],
+      "skills": [
+        "./skills"
+      ],
       "prompts": [
         "./prompts"
       ],
@@ -114,7 +123,7 @@
     {
       "id": "workspace",
       "source": "docs/profiles/workspace.profile.json",
-      "sha256": "7c7d9eed36d10b2c27de3b8a4b3247faeb2b064504acab7971f5bf07b390dcd0",
+      "sha256": "f56dfe50daa2838b524310fdec357d927b20cd872f60da9e23a0e9d1da50a4f3",
       "packages": [
         "git:github.com/zzanghyunmoo/oh-my-pi",
         "npm:pi-web-access",
@@ -142,6 +151,9 @@
         "confluence"
       ],
       "providers": [],
+      "skills": [
+        "./skills"
+      ],
       "prompts": [
         "./prompts"
       ],

@@ -53,6 +53,9 @@
     ],
     "themes": [
       "./themes"
+    ],
+    "skills": [
+      "./skills"
     ]
   },
   "extensionToggles": [

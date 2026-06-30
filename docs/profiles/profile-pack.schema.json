@@ -60,11 +60,20 @@
       "additionalProperties": false,
       "required": [
         "extensions",
+        "skills",
         "prompts",
         "themes"
       ],
       "properties": {
         "extensions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "skills": {
           "type": "array",
           "items": {
             "type": "string",

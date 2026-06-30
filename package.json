@@ -30,6 +30,7 @@
       "./extensions/workspace-connectors",
       "./extensions/setup-doctor"
     ],
+    "skills": ["./skills"],
     "prompts": ["./prompts"],
     "themes": ["./themes"]
   }

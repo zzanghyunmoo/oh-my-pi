@@ -16,7 +16,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "source", "sha256", "packages", "extensions", "enabledToggles", "secretRefNames", "connectors", "providers", "prompts", "themes"],
+        "required": ["id", "source", "sha256", "packages", "extensions", "enabledToggles", "secretRefNames", "connectors", "providers", "skills", "prompts", "themes"],
         "properties": {
           "id": { "type": "string", "minLength": 1 },
           "source": { "type": "string", "minLength": 1 },
@@ -27,6 +27,7 @@
           "secretRefNames": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
           "connectors": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
           "providers": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+          "skills": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
           "prompts": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
           "themes": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true }
         }

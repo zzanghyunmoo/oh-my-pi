@@ -12,6 +12,7 @@ export interface EnvironmentVariableRequirement {
 
 export interface ExposedCapabilitySurface {
   readonly commands?: readonly string[];
+  readonly skills?: readonly string[];
   readonly tools?: readonly string[];
   readonly providers?: readonly string[];
 }
@@ -127,13 +128,15 @@ export const capabilityRegistry: readonly CapabilityCapsule[] = [
     extensionPath: "./extensions/setup-doctor",
     envVars: [],
     exposes: {
-      commands: ["oh-my-pi-doctor", "oh-my-pi", "connector-setup"],
+      commands: ["oh-my-pi-doctor", "oh-my-pi", "omp", "connector-setup"],
+      skills: ["omp"],
     },
     safetyClass: "local-configuration",
     diagnostics: [
       "Summarizes CWD .env, capability toggles, connector/provider metadata, runtime safety policies, gh auth, and local-only paths.",
       "Provides a lightweight /oh-my-pi command palette for setup and profile verification commands.",
       "Registers /connector-setup as the always-available connector setup bootstrap surface.",
+      "Routes omp: <skill-or-command> input through the oh-my-pi namespace facade.",
     ],
   },
 ];
