@@ -32,12 +32,15 @@ profile lock before recreating a machine:
 
 ```bash
 npm run profile:verify
-npm run profile:apply -- --profile full   # dry-run only; prints install/.env/login intent
+npm run profile:apply -- --profile proxy-provider  # Quotio provider only
+npm run profile:apply -- --profile workspace       # Linear/Notion/GitHub connectors
+npm run profile:apply -- --profile full            # connectors + Quotio provider
 ```
 
-`profile:apply` does not run `pi install`, write `.env`, or start OAuth by default.
+`profile:apply` does not run `pi install`, write `.env`, edit settings, or start OAuth by default.
 Use its output as a safe checklist for `default`, `workspace`, `proxy-provider`, or
-`full` profile setup.
+`full` profile setup. The dry-run also prints a copyable `settings.json` package entry
+that filters oh-my-pi resources to the selected profile extensions.
 
 에이전트가 실행되는 디렉토리(CWD)에 `.env` 파일을 생성하여 익스텐션을 설정합니다:
 
@@ -59,7 +62,7 @@ QUOTIO_API_KEY=<local-quotio-api-key>
 
 - `/oh-my-pi` — Show the oh-my-pi command palette and setup help
 - `/oh-my-pi-doctor` — Check local env, capability registry, connector/provider metadata, safety policies, gh auth, and local-only paths
-- `/quotio-status` — Check proxy connectivity and authentication
+- `/quotio-status` — Check Quotio provider connectivity and authentication (enabled by `proxy-provider` or `full` profile)
 - `/connector-login linear|notion` — OAuth login for workspace connectors
 - `/connector-tools linear|notion` — List connector tools after login
 
