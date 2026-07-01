@@ -29,8 +29,15 @@
       "./extensions/workspace-connectors",
       "./extensions/setup-doctor"
     ],
-    "prompts": ["./prompts"],
-    "themes": ["./themes"]
+    "prompts": [
+      "./prompts"
+    ],
+    "themes": [
+      "./themes"
+    ],
+    "skills": [
+      "./skills"
+    ]
   },
   "extensionToggles": [
     {

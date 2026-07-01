@@ -4,7 +4,9 @@
   "id": "proxy-provider",
   "displayName": "Quotio proxy provider",
   "description": "Profile for machines that should register the Quotio LiteLLM/OpenAI-compatible provider while keeping endpoint and API key values local-only.",
-  "extends": ["default"],
+  "extends": [
+    "default"
+  ],
   "packageRefs": [
     {
       "name": "oh-my-pi",
@@ -28,8 +30,15 @@
       "./extensions/workspace-connectors",
       "./extensions/setup-doctor"
     ],
-    "prompts": ["./prompts"],
-    "themes": ["./themes"]
+    "prompts": [
+      "./prompts"
+    ],
+    "themes": [
+      "./themes"
+    ],
+    "skills": [
+      "./skills"
+    ]
   },
   "extensionToggles": [
     {
@@ -87,7 +96,10 @@
       "adapter": "openai-compatible",
       "enabledByDefault": true,
       "toggleEnvVar": "ENABLE_QUOTIO",
-      "requiredSecretRefs": ["QUOTIO_BASE_URL", "QUOTIO_API_KEY"],
+      "requiredSecretRefs": [
+        "QUOTIO_BASE_URL",
+        "QUOTIO_API_KEY"
+      ],
       "statusCommand": "/quotio-status",
       "modelDiscovery": "GET /models through extensions/provider-adapter-kit/openai-compatible.ts"
     }

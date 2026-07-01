@@ -15,9 +15,15 @@ oh-my-pi/
 │   ├── plans/                  # ce-plan 결과물
 │   ├── ideation/               # ce-ideate 결과물
 │   └── solutions/              # 문서화된 패턴/컨벤션 (category별, YAML frontmatter로 검색 가능)
+├── CONCEPTS.md                 # 공유 도메인 어휘 (엔티티, 프로세스, 상태 개념)
 ├── package.json                # Pi 패키지 설정
 └── README.md
 ```
+
+## 지식 저장소
+
+- `docs/solutions/`는 과거 문제 해결, 버그, 패턴, 워크플로 지식을 category와 YAML frontmatter(`module`, `tags`, `problem_type`)로 검색할 수 있는 저장소다. 구현, 디버깅, 구조 결정 시 관련 영역의 선례를 찾는 데 유용하다.
+- `CONCEPTS.md`는 프로젝트 고유 용어를 정의하는 공유 어휘집이다. connector, provider, profile, safety policy 같은 도메인 개념을 논의하거나 문서화할 때 참고한다.
 
 ## Extension 개발 규칙
 

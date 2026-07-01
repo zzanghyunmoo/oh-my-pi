@@ -1,278 +1,334 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { EventEmitter } from "node:events";
-import workspaceConnectorsExtension, {
-	buildMcpRemoteEnvironment,
-	formatInteractiveLoginResultNotification,
-	runInteractiveLogin,
-	type InteractiveLoginResult,
-} from "./index.js";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import workspaceConnectorsExtension from "./index.js";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { routeWorkspaceMcpConnector } from "../connector-backend-catalog.js";
+import { routeCliConnector, routeSetupOnlyConnector, routeWorkspaceMcpConnector } from "../connector-backend-catalog.js";
+import {
+  clearOAuthState,
+  getConnectorAuthPath,
+  getConnectorAuthStatus,
+  removeAuthFileIfEmpty,
+  resolveAccessKey,
+} from "./auth.js";
 
-class FakeChild extends EventEmitter {}
+type RegisteredCommand = { handler: (args: string, ctx: unknown) => Promise<void> | void };
 
-test("buildMcpRemoteEnvironment appends system CA trust and preserves TLS/proxy overrides", () => {
-	const env = buildMcpRemoteEnvironment({
-		NODE_OPTIONS: "--max-old-space-size=4096",
-		NODE_EXTRA_CA_CERTS: "/tmp/custom-ca.pem",
-		HTTPS_PROXY: "http://proxy.example.test:8080",
-		NO_PROXY: "localhost,127.0.0.1",
-	});
-
-	assert.equal(env.NODE_OPTIONS, "--max-old-space-size=4096 --use-system-ca");
-	assert.equal(env.NODE_EXTRA_CA_CERTS, "/tmp/custom-ca.pem");
-	assert.equal(env.HTTPS_PROXY, "http://proxy.example.test:8080");
-	assert.equal(env.NO_PROXY, "localhost,127.0.0.1");
-});
-
-test("buildMcpRemoteEnvironment does not duplicate the system CA Node option", () => {
-	const env = buildMcpRemoteEnvironment({ NODE_OPTIONS: "--use-system-ca" });
-
-	assert.equal(env.NODE_OPTIONS, "--use-system-ca");
-});
-
-function makeContext(hasUI = true) {
-	const calls: string[] = [];
-
-	return {
-		calls,
-		ctx: {
-			hasUI,
-			ui: {
-				notify: () => undefined,
-				custom: <T>(
-					factory: (
-						tui: {
-							stop(): void;
-							start(): void;
-							requestRender(force?: boolean): void;
-						},
-						theme: unknown,
-						keybindings: unknown,
-						done: (result: T) => void,
-					) => { render(): string[]; invalidate(): void },
-				) =>
-					new Promise<T>((resolve) => {
-						const component = factory(
-							{
-								stop: () => calls.push("stop"),
-								start: () => calls.push("start"),
-								requestRender: (force?: boolean) =>
-									calls.push(`render:${String(force)}`),
-							},
-							{},
-							{},
-							resolve,
-						);
-						assert.deepEqual(component.render(), []);
-						component.invalidate();
-					}),
-			},
-		},
-	};
+async function withTempAuthPath<T>(fn: (path: string) => Promise<T> | T): Promise<T> {
+  const previous = process.env.OH_MY_PI_CONNECTOR_AUTH_PATH;
+  const dir = await mkdtemp(join(tmpdir(), "oh-my-pi-connectors-"));
+  const path = join(dir, "auth.json");
+  process.env.OH_MY_PI_CONNECTOR_AUTH_PATH = path;
+  try {
+    return await fn(path);
+  } finally {
+    if (previous === undefined) {
+      delete process.env.OH_MY_PI_CONNECTOR_AUTH_PATH;
+    } else {
+      process.env.OH_MY_PI_CONNECTOR_AUTH_PATH = previous;
+    }
+    await rm(dir, { recursive: true, force: true });
+  }
 }
 
-test("runInteractiveLogin stops TUI before spawn and restores it after successful exit", async () => {
-	const { ctx, calls } = makeContext();
-	const child = new FakeChild();
-	const resultPromise = runInteractiveLogin(
-		"npx",
-		["-y"],
-		ctx,
-		(command, args) => {
-			calls.push(`spawn:${command}:${args.join(" ")}`);
-			return child;
-		},
-	);
+async function withTempSetupPath<T>(fn: (path: string) => Promise<T> | T): Promise<T> {
+  const previous = process.env.OH_MY_PI_CONNECTOR_SETUP_PATH;
+  const dir = await mkdtemp(join(tmpdir(), "oh-my-pi-setup-state-"));
+  const path = join(dir, "setup.json");
+  process.env.OH_MY_PI_CONNECTOR_SETUP_PATH = path;
+  try {
+    return await fn(path);
+  } finally {
+    if (previous === undefined) {
+      delete process.env.OH_MY_PI_CONNECTOR_SETUP_PATH;
+    } else {
+      process.env.OH_MY_PI_CONNECTOR_SETUP_PATH = previous;
+    }
+    await rm(dir, { recursive: true, force: true });
+  }
+}
 
-	assert.deepEqual(calls, ["stop", "spawn:npx:-y"]);
-	child.emit("exit", 0, null);
+function registerExtension() {
+  const previousToggle = process.env.ENABLE_WORKSPACE_CONNECTORS;
+  process.env.ENABLE_WORKSPACE_CONNECTORS = "true";
+  const commands = new Map<string, RegisteredCommand>();
+  const tools = new Map<string, any>();
+  const pi = {
+    on: () => undefined,
+    registerCommand: (name: string, options: unknown) => {
+      commands.set(name, options as RegisteredCommand);
+    },
+    registerTool: (definition: { name: string }) => {
+      tools.set(definition.name, definition);
+    },
+  } as unknown as ExtensionAPI;
 
-	assert.deepEqual(await resultPromise, {
-		status: "completed",
-		code: 0,
-		signal: null,
-	} satisfies InteractiveLoginResult);
-	assert.deepEqual(calls, ["stop", "spawn:npx:-y", "start", "render:true"]);
+  try {
+    workspaceConnectorsExtension(pi);
+  } finally {
+    if (previousToggle === undefined) {
+      delete process.env.ENABLE_WORKSPACE_CONNECTORS;
+    } else {
+      process.env.ENABLE_WORKSPACE_CONNECTORS = previousToggle;
+    }
+  }
+
+  return { commands, tools };
+}
+
+test("connector catalog uses direct OAuth with access-key fallback metadata", () => {
+  const linear = routeWorkspaceMcpConnector("linear");
+  const notion = routeWorkspaceMcpConnector("notion");
+
+  assert.equal(linear.transportStrategy, "streamable-http");
+  assert.equal(linear.tenant, "personal");
+  assert.equal(linear.capabilitySlot, "issue-tracker");
+  assert.deepEqual(linear.accessKeyEnvVars, ["LINEAR_API_KEY"]);
+  assert.equal(linear.oauth.callbackPort, 3334);
+  assert.match(linear.authGuidance, /browser OAuth/);
+  assert.match(linear.legacyMcpRemoteLoginShellCommand, /mcp-remote-client/);
+
+  assert.deepEqual(notion.accessKeyEnvVars, ["NOTION_API_KEY", "NOTION_TOKEN"]);
+  assert.equal(notion.capabilitySlot, "wiki");
+  assert.equal(notion.oauth.callbackPort, 3335);
+
+  const gitlab = routeCliConnector("gitlab");
+  assert.equal(gitlab.tenant, "company");
+  assert.equal(gitlab.capabilitySlot, "git");
+  assert.equal(gitlab.command, "glab");
+
+  const jira = routeSetupOnlyConnector("jira");
+  assert.equal(jira.runtimeStatus, "runtime-gated");
+  assert.equal(jira.capabilitySlot, "issue-tracker");
 });
 
-test("runInteractiveLogin enables system CA trust for the Node-based MCP remote login process", async () => {
-	const { ctx } = makeContext();
-	const child = new FakeChild();
-	let spawnEnv: NodeJS.ProcessEnv | undefined;
-	const resultPromise = runInteractiveLogin(
-		"npx",
-		["-y"],
-		ctx,
-		(_command, _args, options) => {
-			spawnEnv = (options as { env?: NodeJS.ProcessEnv }).env;
-			return child;
-		},
-	);
+test("resolveAccessKey follows service-specific env fallback order", () => {
+  const previousLinear = process.env.LINEAR_API_KEY;
+  const previousNotionApi = process.env.NOTION_API_KEY;
+  const previousNotionToken = process.env.NOTION_TOKEN;
 
-	child.emit("exit", 0, null);
+  try {
+    process.env.LINEAR_API_KEY = "lin_test";
+    delete process.env.NOTION_API_KEY;
+    process.env.NOTION_TOKEN = "notion_fallback";
 
-	assert.equal((await resultPromise).status, "completed");
-	assert.match(spawnEnv?.NODE_OPTIONS ?? "", /--use-system-ca/);
+    assert.deepEqual(resolveAccessKey("linear"), { envVar: "LINEAR_API_KEY", value: "lin_test" });
+    assert.deepEqual(resolveAccessKey("notion"), { envVar: "NOTION_TOKEN", value: "notion_fallback" });
+
+    process.env.NOTION_API_KEY = "notion_primary";
+    assert.deepEqual(resolveAccessKey("notion"), { envVar: "NOTION_API_KEY", value: "notion_primary" });
+  } finally {
+    if (previousLinear === undefined) delete process.env.LINEAR_API_KEY;
+    else process.env.LINEAR_API_KEY = previousLinear;
+    if (previousNotionApi === undefined) delete process.env.NOTION_API_KEY;
+    else process.env.NOTION_API_KEY = previousNotionApi;
+    if (previousNotionToken === undefined) delete process.env.NOTION_TOKEN;
+    else process.env.NOTION_TOKEN = previousNotionToken;
+  }
 });
 
-test("runInteractiveLogin restores TUI after a non-zero exit", async () => {
-	const { ctx, calls } = makeContext();
-	const child = new FakeChild();
-	const resultPromise = runInteractiveLogin("npx", ["-y"], ctx, () => child);
+test("auth status reports local auth path, OAuth tokens, and access-key mode", async () => {
+  await withTempAuthPath(async (path) => {
+    const previousLinear = process.env.LINEAR_API_KEY;
+    process.env.LINEAR_API_KEY = "lin_test";
+    await writeFile(path, JSON.stringify({
+      version: 1,
+      services: {
+        linear: {
+          oauth: {
+            tokens: {
+              access_token: "oauth_access",
+              refresh_token: "oauth_refresh",
+              token_type: "Bearer",
+            },
+          },
+        },
+      },
+    }));
 
-	child.emit("exit", 1, null);
-
-	assert.deepEqual(await resultPromise, {
-		status: "completed",
-		code: 1,
-		signal: null,
-	} satisfies InteractiveLoginResult);
-	assert.deepEqual(calls, ["stop", "start", "render:true"]);
+    try {
+      const status = await getConnectorAuthStatus("linear");
+      assert.equal(getConnectorAuthPath(), path);
+      assert.equal(status.oauthTokenPresent, true);
+      assert.equal(status.oauthRefreshTokenPresent, true);
+      assert.equal(status.accessKeyConfigured, true);
+      assert.equal(status.preferredMode, "oauth");
+    } finally {
+      if (previousLinear === undefined) delete process.env.LINEAR_API_KEY;
+      else process.env.LINEAR_API_KEY = previousLinear;
+    }
+  });
 });
 
-test("runInteractiveLogin restores TUI after signal termination", async () => {
-	const { ctx, calls } = makeContext();
-	const child = new FakeChild();
-	const resultPromise = runInteractiveLogin("npx", ["-y"], ctx, () => child);
+test("clearOAuthState removes stored OAuth data without touching access-key env", async () => {
+  await withTempAuthPath(async (path) => {
+    await writeFile(path, JSON.stringify({
+      version: 1,
+      services: {
+        linear: {
+          oauth: {
+            tokens: {
+              access_token: "oauth_access",
+              token_type: "Bearer",
+            },
+          },
+        },
+      },
+    }));
 
-	child.emit("exit", null, "SIGTERM");
+    await clearOAuthState("linear");
+    await removeAuthFileIfEmpty();
 
-	assert.deepEqual(await resultPromise, {
-		status: "completed",
-		code: null,
-		signal: "SIGTERM",
-	} satisfies InteractiveLoginResult);
-	assert.deepEqual(calls, ["stop", "start", "render:true"]);
+    await assert.rejects(() => readFile(path, "utf-8"));
+  });
 });
 
-test("runInteractiveLogin restores TUI and returns spawn errors instead of throwing", async () => {
-	const { ctx, calls } = makeContext();
-	const child = new FakeChild();
-	const resultPromise = runInteractiveLogin("npx", ["-y"], ctx, () => child);
-	const error = Object.assign(new Error("spawn npx ENOENT"), {
-		code: "ENOENT",
-	});
+test("extension registers direct-auth commands and connector tools", () => {
+  const { commands, tools } = registerExtension();
 
-	child.emit("error", error);
-
-	assert.deepEqual(await resultPromise, {
-		status: "spawn-error",
-		error: "ENOENT: spawn npx ENOENT",
-	} satisfies InteractiveLoginResult);
-	assert.deepEqual(calls, ["stop", "start", "render:true"]);
+  assert.ok(commands.has("connector-login"));
+  assert.ok(commands.has("connector-status"));
+  assert.ok(commands.has("connector-logout"));
+  assert.ok(commands.has("connector-tools"));
+  assert.deepEqual(Array.from(tools.keys()).sort(), ["github_gh_cli", "gitlab_glab_cli", "workspace_mcp_call_tool", "workspace_mcp_list_tools"].sort());
 });
 
-test("runInteractiveLogin does not spawn without an interactive UI", async () => {
-	const { ctx } = makeContext(false);
-	let spawned = false;
+test("connector-login invalid service preserves usage output without starting auth", async () => {
+  const { commands } = registerExtension();
+  const notifications: Array<{ message: string; level: string | undefined }> = [];
+  const command = commands.get("connector-login");
+  assert.ok(command);
 
-	const result = await runInteractiveLogin("npx", ["-y"], ctx, () => {
-		spawned = true;
-		return new FakeChild();
-	});
+  await command.handler("unknown", {
+    ui: {
+      notify: (message: string, level?: string) => notifications.push({ message, level }),
+    },
+  });
 
-	assert.equal(spawned, false);
-	assert.deepEqual(result, {
-		status: "unsupported",
-	} satisfies InteractiveLoginResult);
+  assert.deepEqual(notifications, [{ message: "Usage: /connector-login linear|notion", level: "error" }]);
 });
 
-test("fallback formatting is catalog-derived for Linear and Notion", () => {
-	const linear = routeWorkspaceMcpConnector("linear");
-	const notion = routeWorkspaceMcpConnector("notion");
+test("connector-login staged service returns setup guidance without starting auth", async () => {
+  const { commands } = registerExtension();
+  const notifications: Array<{ message: string; level: string | undefined }> = [];
+  const command = commands.get("connector-login");
+  assert.ok(command);
 
-	const linearNotification = formatInteractiveLoginResultNotification(linear, {
-		status: "completed",
-		code: 1,
-		signal: null,
-	});
-	const notionNotification = formatInteractiveLoginResultNotification(notion, {
-		status: "unsupported",
-	});
+  await command.handler("jira", {
+    ui: {
+      notify: (message: string, level?: string) => notifications.push({ message, level }),
+    },
+  });
 
-	assert.equal(linearNotification.level, "error");
-	assert.match(linearNotification.message, /mcp-remote-client/);
-	assert.match(linearNotification.message, /https:\/\/mcp\.linear\.app\/mcp/);
-	assert.match(notionNotification.message, /mcp-remote-client/);
-	assert.match(notionNotification.message, /https:\/\/mcp\.notion\.com\/mcp/);
+  assert.equal(notifications.length, 1);
+  assert.equal(notifications[0]?.level, "info");
+  assert.match(notifications[0]?.message ?? "", /runtime-gated/);
 });
 
-test("signal-based login notification points to fallback guidance", () => {
-	const route = routeWorkspaceMcpConnector("linear");
-	const notification = formatInteractiveLoginResultNotification(route, {
-		status: "completed",
-		code: null,
-		signal: "SIGTERM",
-	});
+test("connector-status supports all-services summary without network calls", async () => {
+  await withTempAuthPath(async () => {
+    const { commands } = registerExtension();
+    const notifications: Array<{ message: string; level: string | undefined }> = [];
+    const command = commands.get("connector-status");
+    assert.ok(command);
 
-	assert.equal(notification.level, "error");
-	assert.match(notification.message, /signal SIGTERM/);
-	assert.match(notification.message, /External shell fallback/);
+    await command.handler("", {
+      ui: {
+        notify: (message: string, level?: string) => notifications.push({ message, level }),
+      },
+    });
+
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]?.level, "info");
+    assert.match(notifications[0]?.message ?? "", /Linear/);
+    assert.match(notifications[0]?.message ?? "", /Notion/);
+    assert.match(notifications[0]?.message ?? "", /not authenticated/);
+  });
 });
 
-test("connector-login invalid service preserves usage output without invoking custom TUI handoff", async () => {
-	const previousToggle = process.env.ENABLE_WORKSPACE_CONNECTORS;
-	process.env.ENABLE_WORKSPACE_CONNECTORS = "true";
-	let customCalled = false;
-	const commands = new Map<
-		string,
-		{ handler: (args: string, ctx: unknown) => Promise<void> | void }
-	>();
-	const pi = {
-		on: () => undefined,
-		registerCommand: (name: string, options: unknown) => {
-			commands.set(
-				name,
-				options as {
-					handler: (args: string, ctx: unknown) => Promise<void> | void;
-				},
-			);
-		},
-		registerTool: () => undefined,
-	} as unknown as ExtensionAPI;
-	const notifications: Array<{ message: string; level: string | undefined }> =
-		[];
+test("connector-logout previews before clearing OAuth state", async () => {
+  await withTempAuthPath(async (path) => {
+    await writeFile(path, JSON.stringify({
+      version: 1,
+      services: {
+        linear: {
+          oauth: {
+            tokens: {
+              access_token: "oauth_access",
+              token_type: "Bearer",
+            },
+          },
+        },
+      },
+    }));
 
-	try {
-		workspaceConnectorsExtension(pi);
-		const command = commands.get("connector-login");
-		assert.ok(command);
-		await command.handler("jira", {
-			hasUI: true,
-			ui: {
-				notify: (message: string, level?: string) =>
-					notifications.push({ message, level }),
-				custom: <T>() => {
-					customCalled = true;
-					return Promise.resolve(undefined as T);
-				},
-			},
-		});
-	} finally {
-		if (previousToggle === undefined) {
-			delete process.env.ENABLE_WORKSPACE_CONNECTORS;
-		} else {
-			process.env.ENABLE_WORKSPACE_CONNECTORS = previousToggle;
-		}
-	}
+    const { commands } = registerExtension();
+    const command = commands.get("connector-logout");
+    assert.ok(command);
+    const notifications: Array<{ message: string; level: string | undefined }> = [];
+    const ctx = {
+      ui: {
+        notify: (message: string, level?: string) => notifications.push({ message, level }),
+      },
+    };
 
-	assert.equal(customCalled, false);
-	assert.deepEqual(notifications, [
-		{ message: "Usage: /connector-login linear|notion", level: "error" },
-	]);
+    await command.handler("linear", ctx);
+    assert.match(notifications[notifications.length - 1]?.message ?? "", /Connector logout preview/);
+    assert.match(await readFile(path, "utf-8"), /oauth_access/);
+
+    await command.handler("linear --confirm", ctx);
+    assert.match(notifications[notifications.length - 1]?.message ?? "", /Connector logout result/);
+    await assert.rejects(() => readFile(path, "utf-8"));
+  });
 });
 
-test("successful login notification points to status guidance without fallback failure wording", () => {
-	const route = routeWorkspaceMcpConnector("linear");
-	const notification = formatInteractiveLoginResultNotification(route, {
-		status: "completed",
-		code: 0,
-		signal: null,
-	});
+test("workspace_mcp_call_tool refuses write-like and unknown tool names without confirmation", async () => {
+  const { tools } = registerExtension();
+  const tool = tools.get("workspace_mcp_call_tool");
+  assert.ok(tool);
 
-	assert.equal(notification.level, "info");
-	assert.match(notification.message, /Run \/connector-tools linear/);
-	assert.doesNotMatch(notification.message, /External shell fallback/);
+  await assert.rejects(
+    () => tool.execute("tool-call", { service: "linear", toolName: "createIssue", arguments: {} }),
+    /without explicit confirmation intent/,
+  );
+  await assert.rejects(
+    () => tool.execute("tool-call", { service: "linear", toolName: "syncIssue", arguments: {} }),
+    /without explicit confirmation intent/,
+  );
+});
+
+test("runtime tools require connector setup before backend execution", async () => {
+  await withTempSetupPath(async () => {
+    const { tools } = registerExtension();
+    const tool = tools.get("github_gh_cli");
+    assert.ok(tool);
+
+    await assert.rejects(
+      () => tool.execute("tool-call", { args: ["repo", "view", "OWNER/REPO"] }, new AbortController().signal),
+      /not-configured/,
+    );
+  });
+});
+
+test("connector-status reports malformed setup state with recovery guidance", async () => {
+  await withTempSetupPath(async (path) => {
+    await writeFile(path, "{not-json", "utf-8");
+    const { commands } = registerExtension();
+    const notifications: Array<{ message: string; level: string | undefined }> = [];
+    const command = commands.get("connector-status");
+    assert.ok(command);
+
+    await command.handler("", {
+      ui: {
+        notify: (message: string, level?: string) => notifications.push({ message, level }),
+      },
+    });
+
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]?.level, "error");
+    assert.match(notifications[0]?.message ?? "", /malformed/);
+    assert.match(notifications[0]?.message ?? "", /\/connector-setup/);
+  });
 });
