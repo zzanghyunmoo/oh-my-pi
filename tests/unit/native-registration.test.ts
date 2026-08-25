@@ -140,10 +140,15 @@ test("native registration rejects Claude and Codex collisions without removal", 
   try {
     const activeRoot = join(root, "payload");
     const pluginRoot = join(activeRoot, "plugins", "oh-my-harness");
-    mkdirSync(pluginRoot, { recursive: true });
+    mkdirSync(join(pluginRoot, ".claude-plugin"), { recursive: true });
     writeFileSync(join(pluginRoot, "plugin.txt"), "managed plugin\n");
+    writeFileSync(
+      join(pluginRoot, ".claude-plugin", "plugin.json"),
+      `${JSON.stringify({ name: "oh-my-harness", version: "0.3.2" })}\n`,
+    );
     const registration = {
       activeRoot,
+      expectedVersion: "0.3.2",
       receiptPath: join(root, "receipts", "environment.json"),
     };
 
@@ -207,6 +212,71 @@ test("native registration rejects Claude and Codex collisions without removal", 
   }
 });
 
+test("Claude predecessor replacement rejects an arbitrary reported version before mutation", () => {
+  const root = mkdtempSync(join(tmpdir(), "omh-claude-predecessor-version-"));
+  try {
+    const activeRoot = join(root, "active");
+    const previousRoot = join(root, "previous");
+    for (const [packageRoot, version] of [
+      [activeRoot, "0.3.2"],
+      [previousRoot, "0.3.1"],
+    ] as const) {
+      const pluginRoot = join(packageRoot, "plugins", "oh-my-harness");
+      mkdirSync(join(pluginRoot, ".claude-plugin"), { recursive: true });
+      writeFileSync(join(pluginRoot, "plugin.txt"), "exact managed bytes\n");
+      writeFileSync(
+        join(pluginRoot, ".claude-plugin", "plugin.json"),
+        `${JSON.stringify({ name: "oh-my-harness", version })}\n`,
+      );
+    }
+
+    const calls: string[] = [];
+    assert.throws(
+      () => registerClaudeRuntime(
+        "claude",
+        {
+          activeRoot,
+          expectedVersion: "0.3.2",
+          previousActiveRoot: previousRoot,
+          previousExpectedVersion: "0.3.1",
+          receiptPath: join(root, "receipt.json"),
+        },
+        (_command, args) => {
+          const invocation = args.join(" ");
+          calls.push(invocation);
+          if (invocation === "plugin marketplace list --json") {
+            return JSON.stringify([{
+              name: "oh-my-harness",
+              path: previousRoot,
+            }]);
+          }
+          if (invocation === "plugin list --json") {
+            return JSON.stringify([{
+              enabled: true,
+              id: "oh-my-harness@oh-my-harness",
+              installPath: join(previousRoot, "plugins", "oh-my-harness"),
+              scope: "user",
+              version: "9.9.9",
+            }]);
+          }
+          throw new Error(`unexpected mutation: ${invocation}`);
+        },
+      ),
+      /points to another source/u,
+    );
+    assert.equal(
+      calls.some((call) => /plugin (?:install|uninstall)/u.test(call)),
+      false,
+    );
+    assert.equal(
+      calls.some((call) => /plugin marketplace (?:add|remove)/u.test(call)),
+      false,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("OpenCode registration preserves a config containing non-string plugin entries", () => {
   const root = mkdtempSync(join(tmpdir(), "omh-opencode-config-collision-"));
   try {
@@ -242,10 +312,17 @@ test("clean runtime registration replaces only the exact prior managed roots", (
     const activeRoot = join(root, "active");
     for (const packageRoot of [previousRoot, activeRoot]) {
       const pluginRoot = join(packageRoot, "plugins", "oh-my-harness");
-      mkdirSync(pluginRoot, { recursive: true });
+      mkdirSync(join(pluginRoot, ".claude-plugin"), { recursive: true });
       writeFileSync(
         join(pluginRoot, "plugin.txt"),
         `${packageRoot === previousRoot ? "previous" : "active"}\n`,
+      );
+      writeFileSync(
+        join(pluginRoot, ".claude-plugin", "plugin.json"),
+        `${JSON.stringify({
+          name: "oh-my-harness",
+          version: packageRoot === previousRoot ? "0.3.1" : "0.3.2",
+        })}\n`,
       );
     }
 
@@ -255,6 +332,7 @@ test("clean runtime registration replaces only the exact prior managed roots", (
       "plugins",
       "oh-my-harness",
     );
+    let installedVersion: string | undefined = "0.3.1";
     const calls: string[] = [];
     const run = (_command: string, args: readonly string[]) => {
       const invocation = args.join(" ");
@@ -275,7 +353,7 @@ test("clean runtime registration replaces only the exact prior managed roots", (
                 id: "oh-my-harness@oh-my-harness",
                 installPath: installedRoot,
                 scope: "user",
-                version: "0.3.1",
+                version: installedVersion,
               }],
         );
       }
@@ -284,20 +362,23 @@ test("clean runtime registration replaces only the exact prior managed roots", (
         === "plugin uninstall oh-my-harness@oh-my-harness --scope user"
       ) {
         installedRoot = undefined;
+        installedVersion = undefined;
         return "";
       }
       if (invocation === "plugin marketplace remove oh-my-harness") {
         marketplaceRoot = undefined;
         return "";
       }
-      if (invocation === `plugin marketplace add ${activeRoot}`) {
-        marketplaceRoot = activeRoot;
+      if (invocation.startsWith("plugin marketplace add ")) {
+        marketplaceRoot = args[3];
         return "";
       }
       if (invocation.startsWith(
         "plugin install oh-my-harness@oh-my-harness --scope user",
       )) {
-        installedRoot = join(activeRoot, "plugins", "oh-my-harness");
+        assert.ok(marketplaceRoot);
+        installedRoot = join(marketplaceRoot, "plugins", "oh-my-harness");
+        installedVersion = marketplaceRoot === activeRoot ? "0.3.2" : "0.3.1";
         return "";
       }
       throw new Error(`unexpected command: ${invocation}`);
@@ -307,7 +388,9 @@ test("clean runtime registration replaces only the exact prior managed roots", (
       "claude",
       {
         activeRoot,
+        expectedVersion: "0.3.2",
         previousActiveRoot: previousRoot,
+        previousExpectedVersion: "0.3.1",
         receiptPath: join(root, "receipt.json"),
       },
       run,
@@ -317,10 +400,26 @@ test("clean runtime registration replaces only the exact prior managed roots", (
       installedRoot,
       join(activeRoot, "plugins", "oh-my-harness"),
     );
+    assert.equal(installedVersion, "0.3.2");
     assert.equal(
       calls.includes("plugin marketplace remove oh-my-harness"),
       true,
     );
+
+    registerClaudeRuntime(
+      "claude",
+      {
+        activeRoot: previousRoot,
+        expectedVersion: "0.3.1",
+        previousActiveRoot: activeRoot,
+        previousExpectedVersion: "0.3.2",
+        receiptPath: join(root, "receipt.json"),
+      },
+      run,
+    );
+    assert.equal(marketplaceRoot, previousRoot);
+    assert.equal(installedRoot, join(previousRoot, "plugins", "oh-my-harness"));
+    assert.equal(installedVersion, "0.3.1");
 
     const configRoot = join(root, "config");
     const configPath = join(configRoot, "opencode", "opencode.json");

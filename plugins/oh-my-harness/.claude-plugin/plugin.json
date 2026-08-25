@@ -1,6 +1,6 @@
 {
   "name": "oh-my-harness",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Cross-runtime engineering harness with role-scoped workspace CLI tools",
   "author": {
     "name": "zzanghyunmoo"

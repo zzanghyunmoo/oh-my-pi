@@ -1,6 +1,6 @@
 {
   "name": "oh-my-harness",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "private": true,
   "description": "Cross-runtime coding-agent harness with a preview-first management CLI.",
   "keywords": [

@@ -19,7 +19,7 @@ const TOOL_DEFINITIONS = cliToolDefinitionsForPolicy(SESSION_POLICY);
 const TOOL_NAMES = new Set(TOOL_DEFINITIONS.map(({ name }) => name));
 const SERVER_INFO = Object.freeze({
   name: "oh-my-harness-cli-tools",
-  version: "0.3.1",
+  version: "0.3.2",
 });
 const MAX_LINE_BYTES = 64 * 1024;
 const JSON_RPC_ERRORS = Object.freeze({

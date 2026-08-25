@@ -103,6 +103,7 @@ import type {
   ApplyRecoveryRecord,
   ManagedStateReceipt,
 } from "../ports/state.js";
+import { HARNESS_VERSION } from "../package-version.js";
 import {
   applyExactPlan,
   recoverPendingApply,
@@ -139,6 +140,7 @@ import {
 } from "./filesystem.js";
 import {
   claudeOfficialMarketplaceReady,
+  claudeManagedPluginVersion,
   claudeRegistrationReady,
   codexMarketplaceAddonReady,
   codexRegistrationReady,
@@ -165,6 +167,7 @@ import {
   registerOpenCodeSkills,
   registerOpenCodeRuntime,
   type ManagedRuntimeRegistrationDisposition,
+  type ClaudeManagedNativeRegistration,
   type OpenCodeManagedRuntimeRegistrationState,
   type OpenCodeSkillRegistration,
   type CodexMarketplaceAddonRegistration,
@@ -1184,31 +1187,100 @@ function compositionNodeTarget(stateRoot: string): string {
   return join(stateRoot, "external", "runtime", "node");
 }
 
-function previousManagedPayloadRoot(
+interface ExactReceiptManagedPayloadIdentity {
+  readonly digest: string;
+  readonly root: string;
+}
+
+type ReceiptManagedPayloadDisposition =
+  | { readonly state: "unmanaged" }
+  | { readonly state: "invalid" }
+  | {
+      readonly identity: ExactReceiptManagedPayloadIdentity;
+      readonly state: "current" | "previous";
+    };
+
+function exactReceiptManagedPayloadIdentity(
   model: EnvironmentModel,
-  runtimeId: AgentId,
-): string | null {
+): ExactReceiptManagedPayloadIdentity | null {
   if (!model.clean || model.currentReceipt === null) return null;
-  const runtimeOwnership = model.currentReceipt.ownership.find(
-    ({ id, kind, scope }) =>
-      id === `runtime:${runtimeId}:native`
-      && kind === "registration"
-      && scope === "managed",
-  );
-  if (runtimeOwnership === undefined) return null;
-  const ownership = model.currentReceipt.ownership.find(
+  const payloadOwnership = model.currentReceipt.ownership.filter(
     ({ id, kind, scope }) =>
       id === "plugin:runtime-package"
       && kind === "directory"
       && scope === "managed",
   );
+  const ownership = payloadOwnership[0];
   if (
-    ownership === undefined
-    || resolve(ownership.target) === resolve(model.managedPayload.activeRoot)
+    payloadOwnership.length !== 1
+    || ownership === undefined
+    || !existsSync(ownership.target)
+    || !ownedTargetStaysWithinStateRoot(model.stateRoot, ownership.target)
+    || !ownedContentMatches(ownership)
   ) {
     return null;
   }
-  return ownership.target;
+  return { digest: ownership.digest, root: ownership.target };
+}
+
+function receiptManagedPayloadDisposition(
+  model: EnvironmentModel,
+  runtimeId: AgentId,
+): ReceiptManagedPayloadDisposition {
+  if (!hasManagedNativeRuntimeOwnership(model, runtimeId)) {
+    return { state: "unmanaged" };
+  }
+  const identity = exactReceiptManagedPayloadIdentity(model);
+  if (identity === null) return { state: "invalid" };
+  return {
+    identity,
+    state: resolve(identity.root) === resolve(model.managedPayload.activeRoot)
+      ? "current"
+      : "previous",
+  };
+}
+
+function previousManagedPayloadIdentity(
+  model: EnvironmentModel,
+  runtimeId: AgentId,
+): ExactReceiptManagedPayloadIdentity | null {
+  const disposition = receiptManagedPayloadDisposition(model, runtimeId);
+  return disposition.state === "previous" ? disposition.identity : null;
+}
+
+function hasManagedNativeRuntimeOwnership(
+  model: EnvironmentModel,
+  runtimeId: AgentId,
+): boolean {
+  return model.clean
+    && model.currentReceipt !== null
+    && model.currentReceipt.ownership.filter(
+      ({ id, kind, scope }) =>
+        id === `runtime:${runtimeId}:native`
+        && kind === "registration"
+        && scope === "managed",
+    ).length === 1;
+}
+
+function claudeNativeRegistration(
+  activeRoot: string,
+  receiptPath: string,
+  expectedVersion: string,
+  previousActiveRoot?: string,
+): ClaudeManagedNativeRegistration {
+  return {
+    activeRoot,
+    expectedVersion,
+    ...(previousActiveRoot === undefined
+      ? {}
+      : {
+          previousActiveRoot,
+          previousExpectedVersion: claudeManagedPluginVersion(
+            previousActiveRoot,
+          ),
+        }),
+    receiptPath,
+  };
 }
 
 function capabilityMarkerPath(
@@ -1310,7 +1382,23 @@ function nativeRuntimePreflights(
   options: ReturnType<typeof normalizedOptions>,
 ): PlanPreflight[] {
   return model.selectedAgents.flatMap((runtimeId): PlanPreflight[] => {
-    const previousActiveRoot = previousManagedPayloadRoot(model, runtimeId);
+    const receiptPayload = receiptManagedPayloadDisposition(model, runtimeId);
+    const previousActiveRoot = receiptPayload.state === "previous"
+      ? receiptPayload.identity.root
+      : null;
+    if (receiptPayload.state === "invalid") {
+      const runtimeName = runtimeId === "claude-code"
+        ? "Claude"
+        : runtimeId === "codex"
+          ? "Codex"
+          : "OpenCode";
+      return [{
+        detail: `${runtimeName} registration no longer has an exact receipt-owned prior payload`,
+        id: `native-registration:${runtimeId}`,
+        required: true,
+        status: "unverifiable",
+      }];
+    }
     if (runtimeId === "opencode") {
       const state = inspectOpenCodeManagedRuntimeRegistration(
         {
@@ -1339,17 +1427,31 @@ function nativeRuntimePreflights(
     const executable = agent.executablePath;
     const nativeRun = (command: string, args: readonly string[]) =>
       runCommand(command, args, options);
-    const inspect = runtimeId === "claude-code"
-      ? inspectClaudeManagedRuntimeRegistration
-      : inspectCodexManagedRuntimeRegistration;
-    const observation = inspect(
-      executable,
-      {
-        activeRoot: previousActiveRoot ?? model.managedPayload.activeRoot,
-        receiptPath: model.receiptPath,
-      },
-      nativeRun,
-    );
+    let observation;
+    try {
+      observation = runtimeId === "claude-code"
+        ? inspectClaudeManagedRuntimeRegistration(
+            executable,
+            claudeNativeRegistration(
+              previousActiveRoot ?? model.managedPayload.activeRoot,
+              model.receiptPath,
+              previousActiveRoot === null
+                ? HARNESS_VERSION
+                : claudeManagedPluginVersion(previousActiveRoot),
+            ),
+            nativeRun,
+          )
+        : inspectCodexManagedRuntimeRegistration(
+            executable,
+            {
+              activeRoot: previousActiveRoot ?? model.managedPayload.activeRoot,
+              receiptPath: model.receiptPath,
+            },
+            nativeRun,
+          );
+    } catch {
+      observation = { marketplace: "collision", plugin: "collision" } as const;
+    }
     const disposition = managedRuntimeRegistrationDisposition(observation);
     const accepted = previousActiveRoot === null
       ? disposition !== "collision"
@@ -1780,7 +1882,7 @@ function planActions(
       options.os,
       target,
     );
-    const previousActiveRoot = previousManagedPayloadRoot(model, runtimeId);
+    const previousPayload = previousManagedPayloadIdentity(model, runtimeId);
     actions.push({
       id: `runtime:${runtimeId}:native`,
       kind: "register",
@@ -1792,7 +1894,12 @@ function planActions(
         operation: "register-runtime",
         ownershipKind: "registration",
         ownershipScope: "managed",
-        ...(previousActiveRoot === null ? {} : { previousActiveRoot }),
+        ...(previousPayload === null
+          ? {}
+          : {
+              previousActiveRoot: previousPayload.root,
+              previousPayloadDigest: previousPayload.digest,
+            }),
         receiptPath: model.receiptPath,
         runtimeId,
       },
@@ -2612,11 +2719,42 @@ async function executeAction(
           }),
       receiptPath: model.receiptPath,
     };
+    const previousPayloadDigest = action.payload?.previousPayloadDigest === undefined
+      ? undefined
+      : payloadString(action, "previousPayloadDigest");
     const nativeRun = (command: string, args: readonly string[]) =>
       runCommand(command, args, options);
     assertManagedPayloadExact(model.managedPayload);
+    const expectedPrevious = previousManagedPayloadIdentity(model, rawId);
+    if (
+      (registration.previousActiveRoot === undefined)
+        !== (previousPayloadDigest === undefined)
+      || (registration.previousActiveRoot === undefined)
+        !== (expectedPrevious === null)
+      || (
+        registration.previousActiveRoot !== undefined
+        && previousPayloadDigest !== undefined
+        && expectedPrevious !== null
+        && (
+          resolve(registration.previousActiveRoot)
+              !== resolve(expectedPrevious.root)
+          || previousPayloadDigest !== expectedPrevious.digest
+        )
+      )
+    ) {
+      throw new Error(`${rawId} prior managed payload identity changed`);
+    }
     if (rawId === "claude-code") {
-      registerClaudeRuntime(executable, registration, nativeRun);
+      registerClaudeRuntime(
+        executable,
+        claudeNativeRegistration(
+          model.managedPayload.activeRoot,
+          model.receiptPath,
+          HARNESS_VERSION,
+          registration.previousActiveRoot,
+        ),
+        nativeRun,
+      );
     }
     else if (rawId === "codex") {
       registerCodexRuntime(executable, registration, nativeRun);
@@ -2664,6 +2802,7 @@ type EnvironmentNativeRecovery =
       readonly executablePath: string;
       readonly kind: "claude-runtime-previous";
       readonly previousActiveRoot: string;
+      readonly previousPayloadDigest: string;
       readonly receiptPath: string;
     }
   | {
@@ -2683,6 +2822,14 @@ type EnvironmentNativeRecovery =
       readonly executablePath: string;
       readonly kind: "codex-runtime-previous";
       readonly previousActiveRoot: string;
+      readonly previousPayloadDigest: string;
+      readonly receiptPath: string;
+    }
+  | {
+      readonly activeRoot: string;
+      readonly kind: "opencode-runtime-previous";
+      readonly previousActiveRoot: string;
+      readonly previousPayloadDigest: string;
       readonly receiptPath: string;
     }
   | {
@@ -2849,6 +2996,7 @@ function validatedNativeRecovery(
       "executablePath",
       "kind",
       "previousActiveRoot",
+      "previousPayloadDigest",
       "receiptPath",
     ],
     "codex-runtime-absent": [
@@ -2862,6 +3010,14 @@ function validatedNativeRecovery(
       "executablePath",
       "kind",
       "previousActiveRoot",
+      "previousPayloadDigest",
+      "receiptPath",
+    ],
+    "opencode-runtime-previous": [
+      "activeRoot",
+      "kind",
+      "previousActiveRoot",
+      "previousPayloadDigest",
       "receiptPath",
     ],
     "codex-addon-both-absent": [
@@ -2899,6 +3055,10 @@ function validatedNativeRecovery(
           "receiptPath",
         ].includes(key)
         && !isAbsolute(String(native[key])),
+    )
+    || (
+      native.previousPayloadDigest !== undefined
+      && !/^[0-9a-f]{64}$/u.test(String(native.previousPayloadDigest))
     )
   ) {
     throw new Error(`invalid native recovery record: ${actionId}`);
@@ -3138,6 +3298,25 @@ function rollbackNativeRegistration(
   options: ReturnType<typeof normalizedOptions>,
 ): void {
   if (native === null) return;
+  if (native.kind === "opencode-runtime-previous") {
+    if (
+      resolve(native.activeRoot) !== resolve(model.managedPayload.activeRoot)
+      || resolve(native.receiptPath) !== resolve(model.receiptPath)
+    ) {
+      throw new Error("OpenCode runtime recovery identity changed");
+    }
+    const expectedPrevious = previousManagedPayloadIdentity(model, "opencode");
+    if (
+      expectedPrevious === null
+      || resolve(expectedPrevious.root) !== resolve(native.previousActiveRoot)
+    ) {
+      throw new Error("OpenCode prior runtime recovery identity changed");
+    }
+    if (native.previousPayloadDigest !== expectedPrevious.digest) {
+      throw new Error("OpenCode prior runtime recovery digest changed");
+    }
+    return;
+  }
   if (
     native.kind === "codex-addon-both-absent"
     || native.kind === "codex-addon-plugin-absent"
@@ -3226,12 +3405,15 @@ function rollbackNativeRegistration(
       throw new Error("Codex runtime recovery identity changed");
     }
     if (native.kind === "codex-runtime-previous") {
-      const expectedPrevious = previousManagedPayloadRoot(model, "codex");
+      const expectedPrevious = previousManagedPayloadIdentity(model, "codex");
       if (
         expectedPrevious === null
-        || resolve(expectedPrevious) !== resolve(native.previousActiveRoot)
+        || resolve(expectedPrevious.root) !== resolve(native.previousActiveRoot)
       ) {
         throw new Error("Codex prior runtime recovery identity changed");
+      }
+      if (native.previousPayloadDigest !== expectedPrevious.digest) {
+        throw new Error("Codex prior runtime recovery digest changed");
       }
       registerCodexRuntime(
         executable,
@@ -3344,20 +3526,27 @@ function rollbackNativeRegistration(
     throw new Error("Claude runtime recovery identity changed");
   }
   if (native.kind === "claude-runtime-previous") {
-    const expectedPrevious = previousManagedPayloadRoot(model, "claude-code");
+    const expectedPrevious = previousManagedPayloadIdentity(
+      model,
+      "claude-code",
+    );
     if (
       expectedPrevious === null
-      || resolve(expectedPrevious) !== resolve(native.previousActiveRoot)
+      || resolve(expectedPrevious.root) !== resolve(native.previousActiveRoot)
     ) {
       throw new Error("Claude prior runtime recovery identity changed");
+    }
+    if (native.previousPayloadDigest !== expectedPrevious.digest) {
+      throw new Error("Claude prior runtime recovery digest changed");
     }
     if (
       claudeRegistrationReady(
         executable,
-        {
-          activeRoot: native.previousActiveRoot,
-          receiptPath: native.receiptPath,
-        },
+        claudeNativeRegistration(
+          native.previousActiveRoot,
+          native.receiptPath,
+          claudeManagedPluginVersion(native.previousActiveRoot),
+        ),
         [],
         nativeRun,
       )
@@ -3367,9 +3556,12 @@ function rollbackNativeRegistration(
     registerClaudeRuntime(
       executable,
       {
-        activeRoot: native.previousActiveRoot,
-        previousActiveRoot: native.activeRoot,
-        receiptPath: native.receiptPath,
+        ...claudeNativeRegistration(
+          native.previousActiveRoot,
+          native.receiptPath,
+          claudeManagedPluginVersion(native.previousActiveRoot),
+          native.activeRoot,
+        ),
       },
       nativeRun,
     );
@@ -3377,10 +3569,11 @@ function rollbackNativeRegistration(
   }
   const state = inspectClaudeManagedRuntimeRegistration(
     executable,
-    {
-      activeRoot: native.activeRoot,
-      receiptPath: native.receiptPath,
-    },
+    claudeNativeRegistration(
+      native.activeRoot,
+      native.receiptPath,
+      HARNESS_VERSION,
+    ),
     nativeRun,
   );
   if (state.plugin === "collision" || state.marketplace === "collision") {
@@ -3416,9 +3609,14 @@ function recoverEnvironmentAction(
     assertRecoveryAlreadyRestored(payload);
     return;
   }
+  if (payload.native?.kind === "opencode-runtime-previous") {
+    rollbackNativeRegistration(payload.native, model, options);
+  }
   const failures: unknown[] = [];
   try {
-    rollbackNativeRegistration(payload.native, model, options);
+    if (payload.native?.kind !== "opencode-runtime-previous") {
+      rollbackNativeRegistration(payload.native, model, options);
+    }
   } catch (error) {
     failures.push(error);
   }
@@ -3579,14 +3777,19 @@ function prepareActionRollback(
       ? payloadString(action, "previousActiveRoot")
       : null;
     if (previousActiveRoot !== null) {
+      const previousPayloadDigest = payloadString(
+        action,
+        "previousPayloadDigest",
+      );
       const nativeRun = (command: string, args: readonly string[]) =>
         runCommand(command, args, options);
       const state = inspectClaudeManagedRuntimeRegistration(
         executable,
-        {
-          activeRoot: previousActiveRoot,
-          receiptPath: model.receiptPath,
-        },
+        claudeNativeRegistration(
+          previousActiveRoot,
+          model.receiptPath,
+          claudeManagedPluginVersion(previousActiveRoot),
+        ),
         nativeRun,
       );
       if (
@@ -3601,6 +3804,7 @@ function prepareActionRollback(
         executablePath: executable,
         kind: "claude-runtime-previous",
         previousActiveRoot,
+        previousPayloadDigest,
         receiptPath: model.receiptPath,
       };
     } else {
@@ -3608,10 +3812,11 @@ function prepareActionRollback(
         runCommand(command, args, options);
       const state = inspectClaudeManagedRuntimeRegistration(
         executable,
-        {
-          activeRoot: model.managedPayload.activeRoot,
-          receiptPath: model.receiptPath,
-        },
+        claudeNativeRegistration(
+          model.managedPayload.activeRoot,
+          model.receiptPath,
+          HARNESS_VERSION,
+        ),
         nativeRun,
       );
       const disposition = managedRuntimeRegistrationDisposition(state);
@@ -3650,6 +3855,10 @@ function prepareActionRollback(
       ? payloadString(action, "previousActiveRoot")
       : null;
     if (previousActiveRoot !== null) {
+      const previousPayloadDigest = payloadString(
+        action,
+        "previousPayloadDigest",
+      );
       const state = inspectCodexManagedRuntimeRegistration(
         executable,
         {
@@ -3668,6 +3877,7 @@ function prepareActionRollback(
         executablePath: executable,
         kind: "codex-runtime-previous",
         previousActiveRoot,
+        previousPayloadDigest,
         receiptPath: model.receiptPath,
       };
     } else {
@@ -3703,6 +3913,39 @@ function prepareActionRollback(
           receiptPath: model.receiptPath,
         };
       }
+    }
+  } else if (
+    operation === "register-runtime"
+    && action.payload?.runtimeId === "opencode"
+  ) {
+    const previousActiveRoot = typeof action.payload.previousActiveRoot === "string"
+      ? payloadString(action, "previousActiveRoot")
+      : null;
+    if (previousActiveRoot !== null) {
+      const previousPayloadDigest = payloadString(
+        action,
+        "previousPayloadDigest",
+      );
+      const state = inspectOpenCodeManagedRuntimeRegistration(
+        {
+          activeRoot: model.managedPayload.activeRoot,
+          previousActiveRoot,
+        },
+        options.env,
+        options.os,
+      );
+      if (state !== "previous") {
+        throw new Error(
+          "OpenCode managed registration no longer matches the prior receipt",
+        );
+      }
+      native = {
+        activeRoot: model.managedPayload.activeRoot,
+        kind: "opencode-runtime-previous",
+        previousActiveRoot,
+        previousPayloadDigest,
+        receiptPath: model.receiptPath,
+      };
     }
   } else if (operation === "register-claude-official") {
     const plugin = model.officialMarketplace.state === "ready"
@@ -4407,13 +4650,14 @@ function nativeDoctorIssues(
         continue;
       }
       const executable = runtimeExecutable(runtimeId, model, options);
-      const registration = {
-        activeRoot: model.managedPayload.activeRoot,
-        receiptPath: model.receiptPath,
-      };
       const nativeRun = (command: string, args: readonly string[]) =>
         runCommand(command, args, options);
       if (runtimeId === "claude-code") {
+        const registration = claudeNativeRegistration(
+          model.managedPayload.activeRoot,
+          model.receiptPath,
+          HARNESS_VERSION,
+        );
         const expectedOfficialPlugins =
           model.officialMarketplace.state === "ready"
             ? model.officialMarketplace.plugins.filter(({ capabilityId }) =>
@@ -4450,6 +4694,10 @@ function nativeDoctorIssues(
         }
         continue;
       }
+      const registration = {
+        activeRoot: model.managedPayload.activeRoot,
+        receiptPath: model.receiptPath,
+      };
       if (!codexRegistrationReady(executable, registration, nativeRun)) {
         issues.push("native:codex:registration-drift");
       }

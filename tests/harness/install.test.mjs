@@ -46,7 +46,7 @@ function createRuntimeStatusFixture(installRoot, id, version) {
 
 function expectedRegistrationPaths(installRoot) {
   return {
-    harness: join(installRoot, "packages", "oh-my-harness", "0.3.1", "a".repeat(64)),
+    harness: join(installRoot, "packages", "oh-my-harness", "0.3.2", "a".repeat(64)),
     compoundEngineering: join(
       installRoot,
       "packages",
@@ -553,7 +553,7 @@ test("Claude status isolates each marketplace and plugin drift cause", async () 
       { name: "compound-engineering-plugin", path: expected.compoundEngineering },
     ];
     const healthyPlugins = [
-      { id: "oh-my-harness@oh-my-harness", version: "0.3.1", scope: "user", enabled: true },
+      { id: "oh-my-harness@oh-my-harness", version: "0.3.2", scope: "user", enabled: true },
       { id: "compound-engineering@compound-engineering-plugin", version: "3.19.0", scope: "user", enabled: true },
     ];
     const cases = [
@@ -698,7 +698,7 @@ test("Claude and OpenCode status report healthy native registration details", as
             { name: "compound-engineering-plugin", path: expected.compoundEngineering },
           ]);
           if (args.join(" ") === "plugin list --json") return JSON.stringify([
-            { id: "oh-my-harness@oh-my-harness", version: "0.3.1", scope: "user", enabled: true },
+            { id: "oh-my-harness@oh-my-harness", version: "0.3.2", scope: "user", enabled: true },
             { id: "compound-engineering@compound-engineering-plugin", version: "3.19.0", scope: "user", enabled: true },
           ]);
           throw new Error(`unexpected command: ${binary} ${args.join(" ")}`);

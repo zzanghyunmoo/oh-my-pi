@@ -65,11 +65,11 @@ test("U15 release manifest binds catalog, managed skills, plugin bytes, and CLI 
     true,
   );
   assert.deepEqual(expected.distribution, {
-    archiveFilename: "oh-my-harness-v0.3.1.tgz",
+    archiveFilename: "oh-my-harness-v0.3.2.tgz",
     packageName: "oh-my-harness",
-    sidecarFilename: "oh-my-harness-v0.3.1.release.json",
-    tag: "v0.3.1",
-    version: "0.3.1",
+    sidecarFilename: "oh-my-harness-v0.3.2.release.json",
+    tag: "v0.3.2",
+    version: "0.3.2",
   });
 });
 
@@ -215,14 +215,14 @@ test("release verification fails closed on tag/version before reading an asset",
     verifyReleaseArtifact(REPOSITORY_ROOT, "missing.tgz", {
       $schema: "harness/contracts/release-catalog.schema.json#/$defs/releaseSidecar",
       archive: {
-        filename: "oh-my-harness-v0.3.1.tgz",
+        filename: "oh-my-harness-v0.3.2.tgz",
         files: [{ mode: 420, path: "package/package.json", sha256: "a".repeat(64), size: 1 }],
         sha256: "b".repeat(64),
         size: 1,
       },
       catalogRevision: released.catalogRevision,
       kind: "release-sidecar",
-      package: { name: "oh-my-harness", tag: "v0.3.2", version: "0.3.1" },
+      package: { name: "oh-my-harness", tag: "v0.3.3", version: "0.3.2" },
       schemaVersion: "2.0.0",
       source: { commit: "c".repeat(40), tree: "d".repeat(40) },
     }),

@@ -31,7 +31,6 @@ import { hashManagedDirectory } from "../install/managed-payload.js";
 import {
   loadOpenCodeCapabilityDefinitions,
 } from "../runtime/opencode.js";
-import { HARNESS_VERSION } from "../package-version.js";
 import {
   assertSafeManagedRootPath,
   atomicWriteFile,
@@ -49,6 +48,25 @@ export interface ManagedNativeRegistration {
   readonly previousActiveRoot?: string;
   readonly receiptPath: string;
 }
+
+interface ClaudeManagedNativeRegistrationBase {
+  readonly activeRoot: string;
+  readonly expectedVersion: string;
+  readonly receiptPath: string;
+}
+
+export type ClaudeManagedNativeRegistration =
+  & ClaudeManagedNativeRegistrationBase
+  & (
+    | {
+        readonly previousActiveRoot?: never;
+        readonly previousExpectedVersion?: never;
+      }
+    | {
+        readonly previousActiveRoot: string;
+        readonly previousExpectedVersion: string;
+      }
+  );
 
 export interface ClaudeOfficialMarketplaceRegistration {
   readonly name: string;
@@ -81,6 +99,70 @@ export type ManagedRuntimeRegistrationDisposition =
   | "missing"
   | "ready"
   | "collision";
+
+const MAX_CLAUDE_PLUGIN_MANIFEST_BYTES = 64 * 1024;
+
+export function claudeManagedPluginVersion(root: string): string {
+  const manifestPath = join(
+    root,
+    "plugins",
+    "oh-my-harness",
+    ".claude-plugin",
+    "plugin.json",
+  );
+  let value: unknown;
+  try {
+    value = JSON.parse(
+      readBoundedRegularFile(
+        manifestPath,
+        MAX_CLAUDE_PLUGIN_MANIFEST_BYTES,
+      ).toString("utf8"),
+    ) as unknown;
+  } catch {
+    throw new Error(
+      `Claude managed plugin manifest is invalid: ${manifestPath}`,
+    );
+  }
+  if (
+    typeof value !== "object"
+    || value === null
+    || Array.isArray(value)
+    || (value as Record<string, unknown>).name !== "oh-my-harness"
+    || typeof (value as Record<string, unknown>).version !== "string"
+    || !/^[0-9]+\.[0-9]+\.[0-9]+$/u.test(
+      String((value as Record<string, unknown>).version),
+    )
+  ) {
+    throw new Error(
+      `Claude managed plugin manifest has no exact version: ${manifestPath}`,
+    );
+  }
+  return String((value as Record<string, unknown>).version);
+}
+
+function assertClaudeManagedRegistrationVersions(
+  registration: ClaudeManagedNativeRegistration,
+): void {
+  if (
+    claudeManagedPluginVersion(registration.activeRoot)
+      !== registration.expectedVersion
+  ) {
+    throw new Error("Claude managed plugin active version changed");
+  }
+  if (
+    (registration.previousActiveRoot === undefined)
+      !== (registration.previousExpectedVersion === undefined)
+  ) {
+    throw new Error("Claude managed plugin predecessor identity is incomplete");
+  }
+  if (
+    registration.previousActiveRoot !== undefined
+    && claudeManagedPluginVersion(registration.previousActiveRoot)
+      !== registration.previousExpectedVersion
+  ) {
+    throw new Error("Claude managed plugin predecessor version changed");
+  }
+}
 
 export function managedRuntimeRegistrationDisposition(
   state: ClaudeManagedRuntimeRegistrationState,
@@ -497,9 +579,10 @@ export function registerClaudeOfficialPlugin(
 
 export function registerClaudeRuntime(
   executable: string,
-  registration: ManagedNativeRegistration,
+  registration: ClaudeManagedNativeRegistration,
   run: NativeCommandRunner,
 ): void {
+  assertClaudeManagedRegistrationVersions(registration);
   const selector = "oh-my-harness@oh-my-harness";
   const marketplaceMatches = parseJsonArray(
     run(executable, ["plugin", "marketplace", "list", "--json"]),
@@ -524,9 +607,13 @@ export function registerClaudeRuntime(
   }
   const plugin = selectorMatches.find((entry) => entry.scope === "user");
 
-  const pluginMatchesRoot = (root: string): boolean => {
+  const pluginMatchesRoot = (
+    root: string,
+    expectedVersion: string,
+  ): boolean => {
     if (
-      plugin?.version !== HARNESS_VERSION
+      plugin === undefined
+      || plugin.version !== expectedVersion
       || plugin.enabled !== true
       || typeof plugin.installPath !== "string"
       || !isAbsolute(plugin.installPath)
@@ -549,8 +636,15 @@ export function registerClaudeRuntime(
   ) {
     if (
       previousRoot === undefined
+      || registration.previousExpectedVersion === undefined
       || resolve(marketplaceSource) !== resolve(previousRoot)
-      || (plugin !== undefined && !pluginMatchesRoot(previousRoot))
+      || (
+        plugin !== undefined
+        && !pluginMatchesRoot(
+          previousRoot,
+          registration.previousExpectedVersion,
+        )
+      )
     ) {
       throw new Error("Claude marketplace oh-my-harness points to another source");
     }
@@ -574,7 +668,10 @@ export function registerClaudeRuntime(
   } else if (
     marketplaceSource !== null
     && plugin !== undefined
-    && !pluginMatchesRoot(registration.activeRoot)
+    && !pluginMatchesRoot(
+      registration.activeRoot,
+      registration.expectedVersion,
+    )
   ) {
     throw new Error(`${selector} collides with an existing user-owned Claude plugin`);
   }
@@ -636,7 +733,7 @@ export function registerClaudeRuntime(
     }
   }
   const pluginCurrent =
-    currentPlugin?.version === HARNESS_VERSION
+    currentPlugin?.version === registration.expectedVersion
     && currentPlugin.enabled === true
     && installedPluginExact;
   if (currentPlugin !== undefined && !pluginCurrent) {
@@ -663,7 +760,7 @@ export function registerClaudeRuntime(
 
 export function inspectClaudeManagedRuntimeRegistration(
   executable: string,
-  registration: ManagedNativeRegistration,
+  registration: ClaudeManagedNativeRegistration,
   run: NativeCommandRunner,
 ): ClaudeManagedRuntimeRegistrationState {
   try {
@@ -683,13 +780,19 @@ export function inspectClaudeManagedRuntimeRegistration(
       run(executable, ["plugin", "list", "--json"]),
       "Claude plugin list",
     ).filter((entry) => entry.id === "oh-my-harness@oh-my-harness");
+    if (marketplaceMatches.length === 0 && pluginMatches.length === 0) {
+      return { marketplace: "missing", plugin: "missing" };
+    }
+    if (pluginMatches.length > 0) {
+      assertClaudeManagedRegistrationVersions(registration);
+    }
     let plugin: ClaudeRegistrationState;
     if (pluginMatches.length === 0) {
       plugin = "missing";
     } else if (
       pluginMatches.length !== 1
       || pluginMatches[0]?.scope !== "user"
-      || pluginMatches[0]?.version !== HARNESS_VERSION
+      || pluginMatches[0]?.version !== registration.expectedVersion
       || pluginMatches[0]?.enabled !== true
       || typeof pluginMatches[0]?.installPath !== "string"
       || !isAbsolute(pluginMatches[0].installPath)
@@ -915,12 +1018,13 @@ export function registerCodexRuntime(
 
 export function claudeRegistrationReady(
   executable: string,
-  registration: ManagedNativeRegistration,
+  registration: ClaudeManagedNativeRegistration,
   officialPlugins: readonly VerifiedOfficialPlugin[],
   run: NativeCommandRunner,
   officialMarketplace?: ClaudeOfficialMarketplaceRegistration,
 ): boolean {
   try {
+    assertClaudeManagedRegistrationVersions(registration);
     const marketplaceMatches = parseJsonArray(
       run(executable, ["plugin", "marketplace", "list", "--json"]),
       "Claude marketplace list",
@@ -943,7 +1047,7 @@ export function claudeRegistrationReady(
     const managedPluginReady =
       managedMatches.length === 1
       && managedPlugin?.scope === "user"
-      && managedPlugin.version === HARNESS_VERSION
+      && managedPlugin.version === registration.expectedVersion
       && managedPlugin.enabled === true
       && typeof managedPlugin.installPath === "string"
       && isAbsolute(managedPlugin.installPath)

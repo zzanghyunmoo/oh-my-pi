@@ -4,13 +4,13 @@
     "name": "zzanghyunmoo"
   },
   "description": "Claude-first profile, capability, startup context, and workspace CLI integration",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "plugins": [
     {
       "name": "oh-my-harness",
       "source": "./plugins/oh-my-harness",
       "description": "Profile-scoped workflows, receipt-bound startup reconciliation, status, and role-scoped workspace CLI tools",
-      "version": "0.3.1",
+      "version": "0.3.2",
       "category": "development"
     }
   ]

@@ -10,7 +10,7 @@ const runtimeId = process.env.OH_MY_HARNESS_RUNTIME ?? "";
 const receiptPath = process.env.OH_MY_HARNESS_RECEIPT_PATH ?? "";
 const serverInfo = Object.freeze({
   name: "oh-my-harness-environment-status",
-  version: "0.3.1",
+  version: "0.3.2",
 });
 const tool = Object.freeze({
   annotations: {

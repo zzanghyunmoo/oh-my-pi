@@ -1,6 +1,6 @@
 {
   "name": "oh-my-harness",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Claude-first environment profiles with Codex-native skills, tools, and startup context",
   "author": {
     "name": "zzanghyunmoo",

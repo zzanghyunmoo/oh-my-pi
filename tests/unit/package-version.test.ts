@@ -12,7 +12,7 @@ function readJson(path: string): Record<string, unknown> {
   return JSON.parse(readFileSync(join(REPOSITORY_ROOT, path), "utf8")) as Record<string, unknown>;
 }
 
-test("0.3.1 package identity is coherent across distributed surfaces", () => {
+test("0.3.2 package identity is coherent across distributed surfaces", () => {
   const packageManifest = readJson("package.json");
   const shrinkwrap = readJson("npm-shrinkwrap.json");
   const marketplace = readJson(".claude-plugin/marketplace.json");
@@ -20,7 +20,7 @@ test("0.3.1 package identity is coherent across distributed surfaces", () => {
   const codexPlugin = readJson("plugins/oh-my-harness/.codex-plugin/plugin.json");
   const release = readJson("harness/catalog/release.json");
 
-  assert.equal(HARNESS_VERSION, "0.3.1");
+  assert.equal(HARNESS_VERSION, "0.3.2");
   assert.equal(packageManifest.version, HARNESS_VERSION);
   assert.equal(shrinkwrap.version, HARNESS_VERSION);
   assert.equal((shrinkwrap.packages as Record<string, { version: string }>)[""]?.version, HARNESS_VERSION);
